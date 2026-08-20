@@ -1,0 +1,24 @@
+; fill.4b - fill the entire screen
+lda #0
+sta r1
+
+@row:
+lda #0
+sta r2
+
+@col:
+flip r2, r1
+inc
+sta r2
+lda r2
+ifeq r1
+jmp @col
+
+inc
+sta r1
+lda r1
+ifeq r1
+jmp @row
+
+@halt:
+jmp @halt

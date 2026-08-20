@@ -1,0 +1,18 @@
+; line.4b - horizontal line across the middle
+lda #8
+sta r1
+lda #0
+sta r2
+sta r3
+
+@draw:
+lda r2
+sta r0
+flip r0, r1
+inc
+sta r2
+ifeq r3
+jmp @draw
+
+@halt:
+jmp @halt
