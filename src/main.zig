@@ -79,9 +79,9 @@ pub fn main(args: std.process.Init) u8 {
 
 fn defaultOutput(alloc: std.mem.Allocator, input_path: []const u8) []const u8 {
     if (std.mem.endsWith(u8, input_path, ".4b")) {
-        return std.fmt.allocPrint(alloc, "{s}rom", .{input_path[0 .. input_path.len - 3]}) catch return input_path;
+        return std.fmt.allocPrint(alloc, "{s}.4b.rom", .{input_path[0 .. input_path.len - 3]}) catch return input_path;
     }
-    return std.fmt.allocPrint(alloc, "{s}.4brom", .{input_path}) catch return input_path;
+    return std.fmt.allocPrint(alloc, "{s}.4b.rom", .{input_path}) catch return input_path;
 }
 
 fn printUsage() void {
