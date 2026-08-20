@@ -1,0 +1,5 @@
+; raw flag/jmp slot test
+flag 0
+jmp 1
+flag 2
+jmp 0

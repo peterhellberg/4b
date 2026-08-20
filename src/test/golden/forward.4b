@@ -1,0 +1,9 @@
+; forward reference test
+jmp @end
+
+@start:
+lda #1
+jmp @start
+
+@end:
+nop

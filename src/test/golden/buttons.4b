@@ -1,0 +1,20 @@
+; flip a pixel at (8,8) while the up button is held
+const UP    = 4
+const EIGHT = 8
+
+lda #8
+sta r0          ; x = 8
+sta r1          ; y = 8
+
+@loop:
+read
+shr
+shr             ; acc = buttons >> 2 (up button now in bit 0)
+shl
+shl
+shl             ; acc = 8 if up held, else 0
+sta r4
+lda #8
+ifeq r4         ; run the flip only when up is held
+flip r0, r1
+jmp @loop

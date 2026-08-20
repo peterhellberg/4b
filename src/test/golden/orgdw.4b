@@ -1,0 +1,5 @@
+; org and dw test
+org 2
+dw 0xABC
+org 5
+dw 0x123

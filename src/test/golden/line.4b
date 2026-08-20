@@ -1,0 +1,18 @@
+; draw a horizontal line across the middle of the screen
+lda #8
+sta r1          ; y = 8
+lda #0
+sta r2          ; x = 0
+sta r3          ; r3 = 0 (loop sentinel)
+
+@draw:
+lda r2
+sta r0          ; x-coord = r2
+flip r0, r1     ; flip pixel (x, 8)
+inc             ; acc = x + 1 (wraps 15 -> 0)
+sta r2          ; x = x + 1
+ifeq r3         ; wrapped to 0? then skip the jump
+jmp @draw
+
+@halt:
+jmp @halt       ; freeze (classic 4BoD halt idiom)
