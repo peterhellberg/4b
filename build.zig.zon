@@ -1,0 +1,19 @@
+.{
+    .name = .fourbc,
+    .version = "0.1.0",
+    .fingerprint = 0xfce9782fd5d27c38,
+    .minimum_zig_version = "0.17.0-dev.387+31f157d80",
+    .dependencies = .{
+        .raylib = .{
+            .url = "https://github.com/raysan5/raylib/archive/aaacda6e147031f2af0cfb6c1fd7e64d761ddb1f.tar.gz",
+            .hash = "raylib-6.0.0-whq8uLXSLwWGU9sQmZVQm0RquGkb0vEediLE8EoK9IYn",
+            .lazy = true,
+        },
+    },
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src",
+        "examples",
+    },
+}
