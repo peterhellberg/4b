@@ -33,7 +33,7 @@ manager and built from source.
 zig build                # build both binaries into zig-out/bin/
 zig build test           # run assembler and VM unit tests
 zig build examples       # assemble all example programs to examples/*.4b
-zig build compile -- <args>   # run 4a directly
+zig build asm -- <args>       # run 4a directly
 zig build run -- <args>       # run the 4b console directly
 ```
 
