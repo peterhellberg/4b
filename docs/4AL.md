@@ -1,12 +1,12 @@
-# 4B Language Specification
+# 4A Language Specification
 
 *Version 0.1 (draft). Companion to `docs/4BoD.md`.*
 
-4B is a small, assembly-style programming language for the 4BoD fantasy
+4A is a small, assembly-style programming language for the 4BoD fantasy
 console. A `.4a` source file is a sequence of instructions that map 1:1 onto
 the 4BoD instruction set, plus a few conveniences (named constants, named
-labels) that the 4B assembler (`4a`) resolves away at build time. Every 4BoD
-machine instruction is expressible in 4B, and every 4B source file assembles to
+labels) that the 4A assembler (`4a`) resolves away at build time. Every 4BoD
+machine instruction is expressible in 4A, and every 4A source file assembles to
 exactly one 384-byte program image.
 
 ## 1. The 4BoD machine, in one paragraph
@@ -69,7 +69,7 @@ A `const` name must not collide with a mnemonic or a register name.
 ## 5. Labels and flags
 
 The machine records the current program position into a flag slot with
-`1011 AAAA` and jumps to that slot with `1100 AAAA`. 4B turns these slots into
+`1011 AAAA` and jumps to that slot with `1100 AAAA`. 4A turns these slots into
 named labels:
 
 - `@name:` defines a label at the current position; it is sugar for
@@ -158,9 +158,9 @@ produces bytes `80 03 21` then 0x00 padding to byte 383.
 
 ## 9. Full ISA coverage
 
-Every 4BoD opcode has a 4B form, so no instruction is unreachable:
+Every 4BoD opcode has a 4A form, so no instruction is unreachable:
 
-| 4BoD opcode | 4B form            |
+| 4BoD opcode | 4A form            |
 |:-----------:|--------------------|
 | `0000`      | `nop`              |
 | `0001`      | `lda rN`           |
@@ -258,7 +258,7 @@ number, duplicate `const`, and `const` shadowing a mnemonic or register name.
 
 - Source files: `.4a`
 - Assembled images: `.4b` (raw 384-byte ROM; loaders may name it anything)
-- Assembler: `4a` (see `docs/4bc.md`)
+- Assembler: `4a` (see `docs/4AD.md`)
 
 ## 14. Reserved words
 
