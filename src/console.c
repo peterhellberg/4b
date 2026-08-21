@@ -49,6 +49,11 @@ extern void vm_init(VM4BoD *vm);
 extern void vm_tick(VM4BoD *vm);
 extern void vm_load_rom(VM4BoD *vm, const uint8_t *data, size_t len);
 
+/* Embedded 4a assembler (src/asm.zig): assembles .4a source into a
+ * 384-byte image. Returns 0 on success, non-zero with diagnostics in err. */
+extern int bc_compile(const char *path, const char *src, size_t src_len,
+                      uint8_t *out, char *err, size_t err_len);
+
 static uint8_t *read_file(const char *path, size_t *out_len) {
     FILE *f = fopen(path, "rb");
     if (!f) return NULL;
@@ -85,6 +90,11 @@ static bool parse_color(const char *s, Color *out) {
     if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) return false;
     *out = (Color){(uint8_t)r, (uint8_t)g, (uint8_t)b, 255};
     return true;
+}
+
+static bool ends_with(const char *s, const char *suffix) {
+    size_t ls = strlen(s), lx = strlen(suffix);
+    return ls >= lx && strcmp(s + ls - lx, suffix) == 0;
 }
 
 int main(int argc, char **argv) {
@@ -137,30 +147,49 @@ int main(int argc, char **argv) {
     }
 
     if (help || !rom_path) {
-        fprintf(stderr, "usage: 4b [flags] <rom.4b.rom>\n");
+        fprintf(stderr, "usage: 4b [flags] <rom.4b | source.4a>\n");
         fprintf(stderr, "  -s, --scale N       pixel scale (default %d)\n", DEFAULT_SCALE);
         fprintf(stderr, "  -n, --speed  N      instructions per frame (default %d)\n", DEFAULT_SPEED);
         fprintf(stderr, "  -p, --palette NAME  use a named palette\n");
         fprintf(stderr, "  -f, --fg  COLOR     foreground color as R,G,B or hex (default d3c9a1)\n");
         fprintf(stderr, "  -b, --bg  COLOR     background color as R,G,B or hex (default 323c39)\n");
+        fprintf(stderr, "\nA .4a source file is assembled at startup.\n");
         return help ? 0 : 1;
     }
     if (scale < 1) scale = 1;
     if (scale > 64) scale = 64;
     if (speed < 1) speed = 1;
 
+    static uint8_t assembled[ROM_SIZE];
     size_t rom_len;
-    uint8_t *rom = read_file(rom_path, &rom_len);
-    if (!rom) { fprintf(stderr, "4b: cannot read %s\n", rom_path); return 1; }
-    if (rom_len != ROM_SIZE) {
-        fprintf(stderr, "4b: %s: expected %d bytes, got %zu\n", rom_path, ROM_SIZE, rom_len);
-        free(rom); return 1;
+    uint8_t *rom;
+
+    if (ends_with(rom_path, ".4a")) {
+        /* Source file: assemble with the embedded 4a. */
+        size_t src_len;
+        char *src = (char *)read_file(rom_path, &src_len);
+        if (!src) { fprintf(stderr, "4b: cannot read %s\n", rom_path); return 1; }
+        char errs[4096];
+        if (bc_compile(rom_path, src, src_len, assembled, errs, sizeof(errs)) != 0) {
+            fprintf(stderr, "%s", errs);
+            free(src);
+            return 1;
+        }
+        free(src);
+        rom = assembled;
+        rom_len = ROM_SIZE;
+    } else {
+        rom = read_file(rom_path, &rom_len);
+        if (!rom) { fprintf(stderr, "4b: cannot read %s\n", rom_path); return 1; }
+        if (rom_len != ROM_SIZE) {
+            fprintf(stderr, "4b: %s: expected %d bytes, got %zu\n", rom_path, ROM_SIZE, rom_len);
+            free(rom); return 1;
+        }
     }
 
     VM4BoD vm;
     vm_init(&vm);
     vm_load_rom(&vm, rom, rom_len);
-    free(rom);
 
     SetTraceLogLevel(LOG_ERROR);
 
@@ -180,6 +209,16 @@ int main(int argc, char **argv) {
     SetTargetFPS(60);
 
     while (!WindowShouldClose()) {
+        if (IsKeyPressed(KEY_F)) {
+            ToggleFullscreen();
+            if (IsWindowFullscreen())
+                SetWindowSize(GetMonitorWidth(GetCurrentMonitor()), GetMonitorHeight(GetCurrentMonitor()));
+            else
+                SetWindowSize(SCREEN_W * scale, SCREEN_H * scale);
+        }
+
+        if (IsKeyPressed(KEY_R)) vm_load_rom(&vm, rom, rom_len);
+
         uint8_t btns = 0;
         if (IsKeyDown(KEY_LEFT))  btns |= 1;
         if (IsKeyDown(KEY_RIGHT)) btns |= 2;
@@ -190,12 +229,16 @@ int main(int argc, char **argv) {
 
         for (int i = 0; i < speed; i++) vm_tick(&vm);
 
+        int px = GetScreenHeight() / SCREEN_H;
+        int ox = (GetScreenWidth() - SCREEN_W * px) / 2;
+        int oy = (GetScreenHeight() - SCREEN_H * px) / 2;
+
         BeginDrawing();
         ClearBackground(bg);
         for (int y = 0; y < SCREEN_H; y++)
             for (int x = 0; x < SCREEN_W; x++)
                 if (vm.screen[y * SCREEN_W + x])
-                    DrawRectangle(x * scale, y * scale, scale, scale, fg);
+                    DrawRectangle(ox + x * px, oy + y * px, px, px, fg);
         EndDrawing();
     }
 

@@ -1,0 +1,124 @@
+; move.4b - steer a single pixel with the arrow keys
+lda #8
+sta r0              ; x = 8
+sta r1              ; y = 8
+sta r7              ; "held" bit pattern
+lda #0
+sta r3              ; zero sentinel
+sta r5              ; handler marker (cleared)
+
+; Handlers sit before the loop so their flags are recorded by the
+; startup fall-through before any jmp can reference them. On that
+; first pass they cancel out: +1, -1, +1, -1.
+
+@hR:                ; x += 1
+lda r0
+inc
+sta r0
+lda r5
+ifeq r7             ; entered from a detector?
+jmp @loop           ; yes - back to the frame loop
+
+@hL:                ; x -= 1 (mod 16)
+lda r0
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+sta r0
+lda r5
+ifeq r7
+jmp @loop
+
+@hD:                ; y += 1
+lda r1
+inc
+sta r1
+lda r5
+ifeq r7
+jmp @loop
+
+@hU:                ; y -= 1 (mod 16)
+lda r1
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+inc
+sta r1
+lda r5
+ifeq r7
+jmp @loop
+
+@loop:
+lda #0
+sta r5              ; clear marker
+cls
+flip r0, r1
+read
+sta r2
+
+; left = buttons bit 0
+lda r2
+shl
+shl
+shl
+sta r5              ; marker := 8 iff held
+ifeq r7
+jmp @hL
+
+; right = buttons bit 1
+lda r2
+shr
+shl
+shl
+shl
+sta r5
+ifeq r7
+jmp @hR
+
+; down = buttons bit 3
+lda r2
+shr
+shr
+shr
+shl
+shl
+shl
+sta r5
+ifeq r7
+jmp @hD
+
+; up = buttons bit 2
+lda r2
+shr
+shr
+shl
+shl
+shl
+sta r5
+ifeq r7
+jmp @hU
+
+jmp @loop

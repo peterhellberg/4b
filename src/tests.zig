@@ -1,11 +1,11 @@
 const std = @import("std");
 const compiler = @import("compiler.zig");
 
-const line_src = @embedFile("test/golden/line.4b");
-const buttons_src = @embedFile("test/golden/buttons.4b");
-const forward_src = @embedFile("test/golden/forward.4b");
-const rawflag_src = @embedFile("test/golden/rawflag.4b");
-const orgdw_src = @embedFile("test/golden/orgdw.4b");
+const line_src = @embedFile("test/golden/line.4a");
+const buttons_src = @embedFile("test/golden/buttons.4a");
+const forward_src = @embedFile("test/golden/forward.4a");
+const rawflag_src = @embedFile("test/golden/rawflag.4a");
+const orgdw_src = @embedFile("test/golden/orgdw.4a");
 
 fn padBytes(comptime data: []const u8) [384]u8 {
     var img: [384]u8 = undefined;

@@ -1,4 +1,4 @@
 .zig-cache
 zig-out
 zig-pkg
-examples/*.rom
+examples/*.4b

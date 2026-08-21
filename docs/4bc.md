@@ -1,15 +1,15 @@
-# 4bc — Compiler Design for the 4B Language
+# 4a — Assembler Design for the 4B Language
 
 *Version 0.1 (draft). Companion to `docs/4B.md`.*
 
-`4bc` compiles a `4B` source file (`.4b`) into a raw 384-byte program image
-(`.4brom`) that a 4BoD machine can run. Implementation language: **Zig
+`4a` assembles a `4B` source file (`.4a`) into a raw 384-byte program image
+(`.4b`) that a 4BoD machine can run. Implementation language: **Zig
 0.17.0-dev.387+31f157d80** (the pinned toolchain for this project). Binary
-name: **`4bc`**.
+name: **`4a`**.
 
 ## 1. Goals
 
-1. Faithfully compile every construct of `docs/4B.md` — including all 16
+1. Faithfully translate every construct of `docs/4B.md` — including all 16
    machine instructions, label/flag assignment, and `const`/`org`/`dw`.
 2. Produce a **deterministic, exactly-384-byte** image whose bit layout is
    defined in `docs/4B.md` §8 and verified by golden tests.
@@ -34,12 +34,12 @@ name: **`4bc`**.
 ## 4. CLI and I/O
 
 ```
-4bc [options] <input.4b>
-  -o, --output <file>   output path (default: <input stem>.4brom)
+4a [options] <input.4a>
+  -o, --output <file>   output path (default: <input stem>.4b)
   -h, --help            print usage and exit
 ```
 
-Behavior: read the source, compile, write the image. On error, print
+Behavior: read the source, assemble, write the image. On error, print
 diagnostics to stderr and exit non-zero; **no output file is written** on
 failure (write to a temp path, then rename, to avoid leaving a partial ROM).
 
@@ -59,7 +59,7 @@ failure (write to a temp path, then rename, to avoid leaving a partial ROM).
     codegen.zig    # two passes: positions, labels, word emission
     encoder.zig    # 12-bit words -> 384-byte image
   test/
-    golden/        # *.4b sources + *.expected byte files
+    golden/        # *.4a sources + *.expected byte files
 ```
 
 ## 6. Build (Zig 0.17.0-dev.387+31f157d80)
@@ -76,7 +76,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
-        .name = "4bc",
+        .name = "4a",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/main.zig"),
             .target = target,
@@ -88,7 +88,7 @@ pub fn build(b: *std.Build) void {
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| run_cmd.addArgs(args);
-    b.step("run", "Run 4bc").dependOn(&run_cmd.step);
+    b.step("run", "Run 4a").dependOn(&run_cmd.step);
 
     const unit_tests = b.addTest(.{ .root_module = exe.root_module });
     const run_tests = b.addRunArtifact(unit_tests);
@@ -269,7 +269,7 @@ order, only `encoder.zig` needs to change (see §16).
 `diag.zig` owns all user-facing output:
 
 ```
-file.4b:12:7: error: undefined label '@start'
+file.4a:12:7: error: undefined label '@start'
    lda #0
    ...^
 ```
@@ -283,7 +283,7 @@ file.4b:12:7: error: undefined label '@start'
 ## 14. Memory and allocation
 
 One `std.heap.ArenaAllocator` over `std.heap.page_allocator` for the whole
-compile (source copy, tokens, items, symbols, words). The image is a fixed
+assembly (source copy, tokens, items, symbols, words). The image is a fixed
 `[384]u8` on the stack. `ArenaAllocator` makes the pipeline leak-free by
 construction; `defer arena.deinit()` in `main`.
 
@@ -295,9 +295,9 @@ Three layers, all run by `zig build test`:
    - lexer: token streams and error positions for representative lines;
    - parser: valid operands, wrong count/kind, out-of-range values;
    - encoder: pack→decode round-trip for random 12-bit words.
-2. **Golden tests**: the §10 example in `docs/4B.md` is `test/golden/line.4b`
+2. **Golden tests**: the §10 example in `docs/4B.md` is `test/golden/line.4a`
    with `line.expected` bytes `80 03 21 00 03 22 30 02 B0 20 01 20 01 0A 50 20
-   02 D3 00 0C B1 10 0C` + 361 zero bytes. Compile and compare with
+   02 D3 00 0C B1 10 0C` + 361 zero bytes. Assemble and compare with
    `std.testing.expectEqualSlices`. Other goldens: the §11 button program, a
    forward-reference `jmp`, a `flag N`/`jmp N` program, an `org`/`dw` program,
    and an all-16-instructions coverage program.
@@ -324,7 +324,7 @@ emulator and confirm the middle row of pixels lights up.
 
 ## 17. Milestones
 
-1. Skeleton: `build.zig`, `main.zig` CLI, `--help`, empty compile.
+1. Skeleton: `build.zig`, `main.zig` CLI, `--help`, assembling an empty file.
 2. Lexer + unit tests.
 3. Parser + ISA signature table + unit tests.
 4. Pass 1 symbols + pass 2 codegen (labels, consts, forward refs).
