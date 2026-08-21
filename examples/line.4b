@@ -11,7 +11,7 @@ sta r0
 flip r0, r1
 inc
 sta r2
-ifeq r3
+iflt r3         ; loop while new x > 0 (exit when it wraps to 0)
 jmp @draw
 
 @halt:

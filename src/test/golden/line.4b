@@ -11,7 +11,7 @@ sta r0          ; x-coord = r2
 flip r0, r1     ; flip pixel (x, 8)
 inc             ; acc = x + 1 (wraps 15 -> 0)
 sta r2          ; x = x + 1
-ifeq r3         ; wrapped to 0? then skip the jump
+iflt r3          ; loop while new x > 0; exit when it wraps to 0
 jmp @draw
 
 @halt:

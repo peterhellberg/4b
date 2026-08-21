@@ -1,6 +1,7 @@
 ; fill.4b - fill the entire screen
 lda #0
 sta r1
+sta r3
 
 @row:
 lda #0
@@ -11,13 +12,13 @@ flip r2, r1
 inc
 sta r2
 lda r2
-ifeq r1
+iflt r3         ; x > 0? next column
 jmp @col
 
-inc
-sta r1
 lda r1
-ifeq r1
+inc
+sta r1          ; y++
+iflt r3         ; y > 0? next row
 jmp @row
 
 @halt:
