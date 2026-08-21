@@ -4,7 +4,7 @@ const std = @import("std");
 const compiler = @import("compiler.zig");
 const diag_mod = @import("diag.zig");
 
-/// Assemble 4B source into a 384-byte ROM image.
+/// Assemble 4A source into a 384-byte ROM image.
 ///
 /// Returns 0 and fills `out` on success. On failure returns 1 and, when
 /// `err_buf` is non-null, writes diagnostics ("path:line:col: error: msg\n"

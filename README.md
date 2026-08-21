@@ -1,16 +1,16 @@
 # 4B
 
-Assembler (`4a`) and console (`4b`) for the 4BoD fantasy console and its 4B
-assembly language: a 16×16 1-bit screen, 16 nibble-wide registers, one
-accumulator, and 256 twelve-bit instructions.
-See `docs/4BoD.md` for the console itself, `docs/4B.md` for the 4B assembly
-language, and `docs/4bc.md` for the assembler design notes.
+A tiny fantasy console with a 16×16 1-bit screen, 16 nibble-wide registers,
+one accumulator, and 256 twelve-bit instructions — assembled with `4a` and
+run with `4b`.
+See `docs/4AL.md` for the assembly language, `docs/4AD.md` for the assembler
+design notes, and `docs/4BoD.md` for the original 4BoD specification.
 
 > [!NOTE]
-> 4B is based on the 4BoD specification, but this is not the 4BoD fantasy
-> console project — it is an independent reimplementation. 4BoD (4 Bits of
-> DOOM) was created by puarsliburf games for the 2017 FC Dev jam; see
-> `docs/4BoD.md` for the original description.
+> 4B is based on the 4BoD specification, but this is not the official 4BoD
+> project — it is an independent reimplementation. 4BoD (4 Bits of DOOM) was
+> created by puarsliburf games for the 2017 FC Dev jam; see `docs/4BoD.md`
+> for the original description.
 
 ## Components
 
@@ -120,6 +120,6 @@ registers at 512, screen at 529, flag table at 786 — and exports `vm_init`,
 `vm_tick` and `vm_load_rom` with C linkage. A unit test pins these offsets so
 the two sides cannot drift apart. The same `vm.zig` module is reused verbatim
 for the native test suite, which exercises every opcode against the
-specification in `docs/4BoD.md` and `docs/4B.md`. The assembler is embedded
+specification in `docs/4BoD.md` and `docs/4AL.md`. The assembler is embedded
 the same way: `src/asm.zig` wraps the assembler behind a single C-ABI entry
 point (`bc_compile`) that returns the 384-byte image and diagnostics.

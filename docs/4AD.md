@@ -1,18 +1,18 @@
-# 4a — Assembler Design for the 4B Language
+# 4A Assembler Design
 
-*Version 0.1 (draft). Companion to `docs/4B.md`.*
+*Version 0.2. Companion to `docs/4AL.md`.*
 
-`4a` assembles a `4B` source file (`.4a`) into a raw 384-byte program image
+`4a` assembles a `4A` source file (`.4a`) into a raw 384-byte program image
 (`.4b`) that a 4BoD machine can run. Implementation language: **Zig
 0.17.0-dev.387+31f157d80** (the pinned toolchain for this project). Binary
 name: **`4a`**.
 
 ## 1. Goals
 
-1. Faithfully translate every construct of `docs/4B.md` — including all 16
+1. Faithfully translate every construct of `docs/4AL.md` — including all 16
    machine instructions, label/flag assignment, and `const`/`org`/`dw`.
 2. Produce a **deterministic, exactly-384-byte** image whose bit layout is
-   defined in `docs/4B.md` §8 and verified by golden tests.
+   defined in `docs/4AL.md` §8 and verified by golden tests.
 3. Give **clear diagnostics** with file/line/column and a source snippet.
 4. Stay small and dependency-free (std-only), so the tool builds and runs
    anywhere Zig does.
@@ -41,7 +41,10 @@ name: **`4a`**.
 
 Behavior: read the source, assemble, write the image. On error, print
 diagnostics to stderr and exit non-zero; **no output file is written** on
-failure (write to a temp path, then rename, to avoid leaving a partial ROM).
+failure — the image is written only after assembly succeeds.
+
+The assembler is also embedded in the `4b` console as a static library
+(see §17), so the console can assemble `.4a` sources at startup.
 
 ## 5. Repository layout
 
@@ -49,52 +52,43 @@ failure (write to a temp path, then rename, to avoid leaving a partial ROM).
 4bc/
   build.zig
   build.zig.zon
+  README.md
+  docs/               # 4BoD.md (machine), 4AL.md (language), 4AD.md (this doc)
+  examples/           # *.4a demo programs; zig build examples emits *.4b
   src/
-    main.zig       # CLI, driver, allocator setup
-    diag.zig       # diagnostics: error/warn with source snippets
-    lexer.zig      # tokens
-    parser.zig     # tokens -> items
-    model.zig      # Op enum, Operand, Item, Signature (ISA table)
-    symbols.zig    # label/const tables, flag-slot allocation
-    codegen.zig    # two passes: positions, labels, word emission
-    encoder.zig    # 12-bit words -> 384-byte image
-  test/
-    golden/        # *.4a sources + *.expected byte files
+    main.zig          # CLI, driver, file I/O
+    compiler.zig      # pipeline driver: lex -> parse -> pass 1 -> pass 2 -> pack
+    diag.zig          # diagnostics: errors with line/col and source snippets
+    lexer.zig         # tokens
+    parser.zig        # tokens -> items
+    model.zig         # Op enum, Operand, Item, ISA signature table
+    symbols.zig       # label/const tables, flag-slot allocation (pass 1)
+    codegen.zig       # word emission (pass 2)
+    encoder.zig       # 12-bit words -> 384-byte image
+    asm.zig           # C-ABI wrapper embedding the assembler in the console
+    vm.zig            # the 4BoD VM, shared with the console
+    console.c         # raylib console (C)
+    tests.zig         # golden + negative tests
+    test/golden/      # *.4a golden sources; expected bytes live in tests.zig
 ```
 
 ## 6. Build (Zig 0.17.0-dev.387+31f157d80)
 
-The toolchain is pinned to **`0.17.0-dev.387+31f157d80`**; record it in
-`build.zig.zon` and the README so all builds use the same std API surface.
-`build.zig` follows the standard module-based layout:
+The toolchain is pinned to **`0.17.0-dev.387+31f157d80`**; recorded in
+`build.zig.zon`. `zig build` installs both binaries (`4a`, `4b`) into
+`zig-out/bin/`. Steps:
 
-```zig
-const std = @import("std");
+| Step                    | What it does                                        |
+| ----------------------- | --------------------------------------------------- |
+| (default)               | build `4a` and the raylib console `4b`              |
+| `zig build compile -- …`| run `4a` directly                                   |
+| `zig build run -- …`    | run the `4b` console                                |
+| `zig build test`        | three suites: compiler module tests, VM tests, embedded-assembler tests |
+| `zig build examples`    | assemble every `examples/*.4a` to `examples/*.4b`   |
 
-pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
-    const optimize = b.standardOptimizeOption(.{});
-
-    const exe = b.addExecutable(.{
-        .name = "4a",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    b.installArtifact(exe);
-
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run_cmd.addArgs(args);
-    b.step("run", "Run 4a").dependOn(&run_cmd.step);
-
-    const unit_tests = b.addTest(.{ .root_module = exe.root_module });
-    const run_tests = b.addRunArtifact(unit_tests);
-    b.step("test", "Run unit tests").dependOn(&run_tests.step);
-}
-```
+The console links against two Zig static libraries built from this repo:
+`vm.zig` (the machine) and `asm.zig` (this assembler's C-ABI wrapper); raylib
+is fetched by the Zig package manager and built from source.
 
 > **Note.** `0.17.0-dev.387+31f157d80` sits mid-stream of the `std.Io`
 > rewrite and the `ArrayList` unmanaged/managed merge; std APIs can shift
@@ -114,16 +108,19 @@ pass 1 must know all label→slot assignments before pass 2 can resolve
 references.
 
 ```
-pub fn compile(alloc: std.mem.Allocator, path: []const u8, src: []const u8) !Image {
-    const tokens = try lexer.lex(alloc, src);
-    const items  = try parser.parse(alloc, tokens);
-    var sym      = try symbols.analyze(alloc, items);   // pass 1
-    const words  = try codegen.generate(alloc, &sym, items); // pass 2
-    var image: encoder.Image = undefined;
+pub fn compile(alloc: std.mem.Allocator, diag: *Diag, src: []const u8) CompileError!Image {
+    const tokens = try lexer.lex(alloc, diag, src);
+    const items  = try parser.parse(alloc, diag, tokens.items);
+    var sym      = try symbols.analyze(alloc, diag, items.items);   // pass 1
+    const words  = try codegen.generate(alloc, diag, &sym, items.items); // pass 2
+    var image: Image = undefined;
     encoder.pack(words.items, &image);
     return image;
 }
 ```
+
+Every stage reports diagnostics through the shared `Diag`; after each stage
+the driver stops with `CompileFailed` as soon as errors exist.
 
 ## 8. Lexer
 
@@ -140,7 +137,7 @@ pub const Token = struct {
 };
 ```
 
-Rules (`docs/4B.md` §3): `;` line comments, case-insensitive identifiers,
+Rules (`docs/4AL.md` §3): `;` line comments, case-insensitive identifiers,
 decimal/hex/binary numbers, the sigils `@ # , :`. The lexer validates number
 shape (`0x`/`0b` prefixes) but not range — range checks happen in the parser
 so diagnostics can name the offending operand. Each line terminates with an
@@ -171,13 +168,13 @@ pub const Item = union(enum) {
 Operand validation uses a per-opcode signature table:
 
 ```zig
-const OpKind = enum { none, reg, imm_or_reg, label_or_slot };
-const Signature = struct { op: Op, a: OpKind, b: OpKind };
-const ISA = [_]Signature{
-    .{ .op = .nop,  .a = .none,            .b = .none },
-    .{ .op = .lda,  .a = .imm_or_reg,      .b = .none },
-    .{ .op = .sta,  .a = .reg,             .b = .none },
-    .{ .op = .peek, .a = .reg,             .b = .reg  },
+const OperandKind = enum { none, reg, imm, reg_or_imm, label_or_slot };
+const Spec = struct { mnemonic: []const u8, op: Op, a: OperandKind, b: OperandKind };
+const specs = [_]Spec{
+    .{ .mnemonic = "nop",  .op = .nop,  .a = .none, .b = .none },
+    .{ .mnemonic = "lda",  .op = .lda_mem, .a = .reg_or_imm, .b = .none },
+    .{ .mnemonic = "sta",  .op = .sta,  .a = .reg,  .b = .none },
+    .{ .mnemonic = "peek", .op = .peek, .a = .reg,  .b = .reg  },
     // ... one entry per mnemonic
 };
 ```
@@ -238,7 +235,7 @@ following word.
 
 ## 12. Encoder (word → image)
 
-`docs/4B.md` §8 defines the layout: word *n* occupies global bits
+`docs/4AL.md` §8 defines the layout: word *n* occupies global bits
 `[12n, 12n+12)`; byte *i* holds bits `[8i, 8i+8)` LSB-first.
 
 ```zig
@@ -274,38 +271,44 @@ file.4a:12:7: error: undefined label '@start'
    ...^
 ```
 
-- Errors are collected during the passes; `main.zig` prints them all (sorted by
-  position) and exits non-zero if any exist.
-- `Symbols.errors` carries `{ msg, line, col }`; source lines are looked up
-  from a line-index built by the lexer, so snippets never require re-scanning.
-- `warn` (non-fatal) is available for future use; today nothing warns.
+- Errors are collected during the passes in encounter order; `main.zig` prints
+  them all and exits non-zero if any exist.
+- `Diag` owns the error list (`{ msg, line, col }`) and a line-start index
+  built at init, so snippets never require re-scanning the source.
+- There is no warning level today; everything user-facing is an error.
 
 ## 14. Memory and allocation
 
-One `std.heap.ArenaAllocator` over `std.heap.page_allocator` for the whole
-assembly (source copy, tokens, items, symbols, words). The image is a fixed
-`[384]u8` on the stack. `ArenaAllocator` makes the pipeline leak-free by
-construction; `defer arena.deinit()` in `main`.
+The CLI uses the process-provided arena (`args.arena`), so no explicit
+allocator teardown is needed in `main`. The embedded entry point
+(`asm.zig`) creates its own `std.heap.ArenaAllocator` over
+`std.heap.page_allocator` per call and deinitializes it before returning.
+The image is a fixed `[384]u8` passed by value; arena allocation makes the
+pipeline leak-free by construction.
 
 ## 15. Testing strategy
 
 Three layers, all run by `zig build test`:
 
 1. **Unit tests** per module:
-   - lexer: token streams and error positions for representative lines;
-   - parser: valid operands, wrong count/kind, out-of-range values;
-   - encoder: pack→decode round-trip for random 12-bit words.
-2. **Golden tests**: the §10 example in `docs/4B.md` is `test/golden/line.4a`
-   with `line.expected` bytes `80 03 21 00 03 22 30 02 B0 20 01 20 01 0A 50 20
-   02 D3 00 0C B1 10 0C` + 361 zero bytes. Assemble and compare with
-   `std.testing.expectEqualSlices`. Other goldens: the §11 button program, a
-   forward-reference `jmp`, a `flag N`/`jmp N` program, an `org`/`dw` program,
-   and an all-16-instructions coverage program.
+   - lexer: token streams for representative lines;
+   - parser: label definitions, operands, `const`;
+   - symbols: slot allocation, reserved names, slot 15 rejection;
+   - codegen: encoding of instructions and label resolution;
+   - encoder: packing of known words.
+2. **Golden tests**: the §10 example in `docs/4AL.md` is `test/golden/line.4a`
+   with expected bytes (inline in `tests.zig`) `80 03 21 00 03 22 30 02 B0 20
+   01 20 01 0A 50 20 02 F3 00 0C B1 10 0C` + 361 zero bytes. Other goldens:
+   the §11 button program, a forward-reference `jmp`, a `flag N`/`jmp N`
+   program, and an `org`/`dw` program.
 3. **Negative tests**: each §12 error condition must produce the expected
    diagnostic text (assert substrings like `undefined label`, `slot 15`).
 
-An end-to-end sanity check (manual, not CI): run the golden ROM in a 4BoD
-emulator and confirm the middle row of pixels lights up.
+The VM (`vm.zig`) and the embedded-assembler wrapper (`asm.zig`) contribute
+their own suites to the same `zig build test` step.
+
+An end-to-end sanity check (manual): run a golden ROM in the console and
+confirm the middle row of pixels lights up.
 
 ## 16. Zig 0.17.0-dev.387+31f157d80 notes and risks
 
@@ -313,29 +316,40 @@ emulator and confirm the middle row of pixels lights up.
   `build.zig.zon`); std APIs are churning (`std.Io` writer/reader types,
   `std.ArrayList` unmanaged/managed merge, build API). Keep I/O in `main.zig`
   and the ISA/bit layout in `model.zig`/`encoder.zig` so churn is localized.
-- Verify the std APIs used (file read/write, args, `ArrayList`, hash maps)
-  against this exact snapshot before writing code; the build snippet in §6 is
-  illustrative and must be confirmed against `zig build -h` on the pin.
-- **ROM byte-order risk**: the canonical packing (§12) is defined by this
-  project; if the target 4BoD reimplementation loads nibbles or words in a
-  different order, flip it inside `encoder.zig` only. Flag this in the README.
+- **ROM byte-order**: the canonical packing (§12) is LSB-first and is
+  confirmed by the bundled VM (`vm_load_rom` unpacks the same layout) and by
+  golden tests; if another 4BoD reimplementation differs, flip it inside
+  `encoder.zig` only.
 - Two-pass position tracking must be identical in both passes; guard with
   `std.debug.assert` in pass 2.
 
-## 17. Milestones
+## 17. Embedding in the console
 
-1. Skeleton: `build.zig`, `main.zig` CLI, `--help`, assembling an empty file.
-2. Lexer + unit tests.
-3. Parser + ISA signature table + unit tests.
-4. Pass 1 symbols + pass 2 codegen (labels, consts, forward refs).
-5. Encoder + file output (temp-file + rename).
-6. Diagnostics polish (multi-error, snippets).
-7. Golden + negative test suite; `zig build test` green.
-8. README with usage, `0.17.0-dev.387+31f157d80` pin, and byte-order caveat.
+`asm.zig` wraps the pipeline behind one C-ABI entry point:
 
-## 18. Open questions
+```zig
+export fn bc_compile(path: [*:0]const u8, src: [*]const u8, src_len: usize,
+                     out: [*]u8, err_buf: ?[*]u8, err_cap: usize) c_int
+```
 
-- Should `warn` be surfaced for e.g. a label that is defined but never jumped
-  to? (Low value; easy to add.)
+It returns 0 and fills `out` (384 bytes) on success; on failure it returns 1
+and writes `path:line:col: error: msg` lines into `err_buf`, NUL-terminated
+and truncated to fit. The console links this library and assembles any `.4a`
+path at startup before opening the window; a unit test covers both paths.
+
+## 18. Status
+
+The v0.1 design has been implemented in full; notable deviations from the
+original plan:
+
+- Output is written directly after success instead of via temp-file + rename.
+- Golden expected bytes live inline in `tests.zig` rather than in separate
+  `.expected` files.
+- The assembler ships embedded in the console (`asm.zig`) in addition to the
+  standalone CLI.
+
+## 19. Open questions
+
+- Should a warning level exist, e.g. for a label that is defined but never
+  jumped to? (Low value; easy to add.)
 - Multi-file includes would ease large games but are out of scope for v0.1.
-- Confirm byte-order against the specific emulator(s) in use before release.
