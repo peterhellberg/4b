@@ -49,7 +49,7 @@ The assembler is also embedded in the `4b` console as a static library
 ## 5. Repository layout
 
 ```
-4bc/
+4b/
   build.zig
   build.zig.zon
   README.md

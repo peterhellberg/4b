@@ -1,7 +1,7 @@
 .{
-    .name = .fourbc,
+    .name = .fourb,
     .version = "0.1.0",
-    .fingerprint = 0xfce9782fd5d27c38,
+    .fingerprint = 0x5f9a231eb83ef793,
     .minimum_zig_version = "0.17.0-dev.387+31f157d80",
     .dependencies = .{
         .raylib = .{
