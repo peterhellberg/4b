@@ -113,13 +113,18 @@ zig build examples && zig build run -- examples/bounce.4b
 
 ## How the pieces fit together
 
-The console executable is C, but everything that matters lives in Zig.
-`src/vm.zig` exposes the VM state as an `extern struct` whose layout mirrors
-the `VM4BoD` struct in `src/console.c` byte for byte — program at offset 0,
-registers at 512, screen at 529, flag table at 786 — and exports `vm_init`,
-`vm_tick` and `vm_load_rom` with C linkage. A unit test pins these offsets so
-the two sides cannot drift apart. The same `vm.zig` module is reused verbatim
-for the native test suite, which exercises every opcode against the
-specification in `docs/4BoD.md` and `docs/4AL.md`. The assembler is embedded
-the same way: `src/asm.zig` wraps the assembler behind a single C-ABI entry
-point (`bc_compile`) that returns the 384-byte image and diagnostics.
+The console executable is C (`src/console.c`, raylib for windowing and
+input), but everything that matters lives in Zig, linked in as static
+libraries:
+
+- **One VM, two frontends** — `src/vm.zig` is compiled both into the console
+  and into the native test suite, which exercises every opcode against the
+  specification in `docs/4BoD.md` and `docs/4AL.md`.
+- **A pinned ABI** — the VM state is an `extern struct` whose layout mirrors
+  the `VM4BoD` struct in `console.c` byte for byte — program at offset 0,
+  registers at 512, screen at 529, flag table at 786 — exposed through
+  `vm_init`, `vm_tick` and `vm_load_rom`. A unit test pins these offsets so
+  the two sides cannot drift apart.
+- **An embedded assembler** — `src/asm.zig` wraps the assembler behind a
+  single C-ABI entry point (`bc_compile`) that returns the 384-byte image
+  and diagnostics, letting the console assemble `.4a` sources at startup.
