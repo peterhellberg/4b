@@ -26,6 +26,16 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_tests.step);
 
+    const vm_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/vm.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_vm_tests = b.addRunArtifact(vm_tests);
+    test_step.dependOn(&run_vm_tests.step);
+
     // ---- 4b console (Zig VM + C raylib) ------------------------------------
     const raylib_dep = b.lazyDependency("raylib", .{
         .target = target,
@@ -76,7 +86,7 @@ pub fn build(b: *std.Build) void {
     };
     for (example_files) |name| {
         const src = std.fmt.allocPrint(b.allocator, "examples/{s}.4b", .{name}) catch continue;
-        const dst = std.fmt.allocPrint(b.allocator, "zig-out/bin/{s}.4b.rom", .{name}) catch continue;
+        const dst = std.fmt.allocPrint(b.allocator, "examples/{s}.4b.rom", .{name}) catch continue;
         const compile = b.addRunArtifact(exe);
         compile.addFileArg(b.path(src));
         compile.addArgs(&.{ "-o", dst });
