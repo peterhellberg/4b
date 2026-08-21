@@ -163,7 +163,20 @@ int main(int argc, char **argv) {
     free(rom);
 
     SetTraceLogLevel(LOG_ERROR);
-    InitWindow(SCREEN_W * scale, SCREEN_H * scale, "4b");
+
+    const char *base = strrchr(rom_path, '/');
+    const char *sep = strrchr(rom_path, '\\');
+    if (sep && (base == NULL || sep > base)) base = sep;
+    base = base ? base + 1 : rom_path;
+    char stem[256];
+    snprintf(stem, sizeof(stem), "%s", base);
+    char *dot = strstr(stem, ".4b.rom");
+    if (dot == NULL) dot = strrchr(stem, '.');
+    if (dot != NULL) *dot = '\0';
+    char title[268];
+    snprintf(title, sizeof(title), "4b: %s", stem);
+
+    InitWindow(SCREEN_W * scale, SCREEN_H * scale, title);
     SetTargetFPS(60);
 
     while (!WindowShouldClose()) {
