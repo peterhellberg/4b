@@ -1,0 +1,5 @@
+# 4A assembly sources — highlight and count as Assembly on GitHub
+*.4a linguist-language=Assembly
+
+# Assembled ROM images are binary
+*.4b binary
