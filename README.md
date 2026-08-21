@@ -121,7 +121,7 @@ libraries:
   and into the native test suite, which exercises every opcode against the
   specification in `docs/4BoD.md` and `docs/4AL.md`.
 - **A pinned ABI** — the VM state is an `extern struct` whose layout mirrors
-  the `VM4BoD` struct in `console.c` byte for byte — program at offset 0,
+  the `VM` struct in `console.c` byte for byte — program at offset 0,
   registers at 512, screen at 529, flag table at 786 — exposed through
   `vm_init`, `vm_tick` and `vm_load_rom`. A unit test pins these offsets so
   the two sides cannot drift apart.

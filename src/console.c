@@ -43,11 +43,11 @@ typedef struct {
     uint16_t flags[16];
     uint8_t  pc;
     uint8_t  buttons;
-} VM4BoD;
+} VM;
 
-extern void vm_init(VM4BoD *vm);
-extern void vm_tick(VM4BoD *vm);
-extern void vm_load_rom(VM4BoD *vm, const uint8_t *data, size_t len);
+extern void vm_init(VM *vm);
+extern void vm_tick(VM *vm);
+extern void vm_load_rom(VM *vm, const uint8_t *data, size_t len);
 
 /* Embedded 4a assembler (src/asm.zig): assembles .4a source into a
  * 384-byte image. Returns 0 on success, non-zero with diagnostics in err. */
@@ -187,7 +187,7 @@ int main(int argc, char **argv) {
         }
     }
 
-    VM4BoD vm;
+    VM vm;
     vm_init(&vm);
     vm_load_rom(&vm, rom, rom_len);
 
