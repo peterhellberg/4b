@@ -39,7 +39,7 @@ const orgdw_expected = padBytes(&[_]u8{
     0x00, 0x00, 0x00, 0xBC, 0x0A, 0x00, 0x00, 0x30, 0x12,
 });
 
-fn compileAndCheck(src: []const u8, expected: *const [384]u8) !void {
+fn assembleAndCheck(src: []const u8, expected: *const [384]u8) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
@@ -54,23 +54,23 @@ fn compileAndCheck(src: []const u8, expected: *const [384]u8) !void {
 }
 
 test "golden: line (horizontal line)" {
-    try compileAndCheck(line_src, &line_expected);
+    try assembleAndCheck(line_src, &line_expected);
 }
 
 test "golden: buttons" {
-    try compileAndCheck(buttons_src, &buttons_expected);
+    try assembleAndCheck(buttons_src, &buttons_expected);
 }
 
 test "golden: forward reference" {
-    try compileAndCheck(forward_src, &forward_expected);
+    try assembleAndCheck(forward_src, &forward_expected);
 }
 
 test "golden: raw flag/jmp" {
-    try compileAndCheck(rawflag_src, &rawflag_expected);
+    try assembleAndCheck(rawflag_src, &rawflag_expected);
 }
 
 test "golden: org/dw" {
-    try compileAndCheck(orgdw_src, &orgdw_expected);
+    try assembleAndCheck(orgdw_src, &orgdw_expected);
 }
 
 const neg_undefined = "jmp @nope\n";
@@ -82,7 +82,7 @@ const neg_bad_mnemonic = "foobar\n";
 const neg_reserved_const = "const nop = 0\n";
 const neg_dup_const = "const X = 1\nconst X = 2\n";
 
-fn compileExpectError(src: []const u8, expected_substr: []const u8) !void {
+fn assembleExpectError(src: []const u8, expected_substr: []const u8) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
@@ -90,7 +90,7 @@ fn compileExpectError(src: []const u8, expected_substr: []const u8) !void {
 
     var diag = assembler.diagnostics.Diag.init(alloc, "<test>", src);
 
-    _ = assembler.compile(alloc, &diag, src) catch {};
+    _ = assembler.assemble(alloc, &diag, src) catch {};
 
     try std.testing.expect(diag.hasErrors());
 
@@ -106,6 +106,7 @@ fn compileExpectError(src: []const u8, expected_substr: []const u8) !void {
 
     if (!found) {
         std.debug.print("expected error containing '{s}', got errors:\n", .{expected_substr});
+
         for (diag.errors.items) |e| {
             std.debug.print("  {s}\n", .{e.msg});
         }
@@ -115,33 +116,33 @@ fn compileExpectError(src: []const u8, expected_substr: []const u8) !void {
 }
 
 test "negative: undefined label" {
-    try compileExpectError(neg_undefined, "undefined label");
+    try assembleExpectError(neg_undefined, "undefined label");
 }
 
 test "negative: label redefined" {
-    try compileExpectError(neg_redefine, "already defined");
+    try assembleExpectError(neg_redefine, "already defined");
 }
 
 test "negative: flag slot 15" {
-    try compileExpectError(neg_slot15, "slot 15");
+    try assembleExpectError(neg_slot15, "slot 15");
 }
 
 test "negative: register out of range" {
-    try compileExpectError(neg_reg_range, "out of range");
+    try assembleExpectError(neg_reg_range, "out of range");
 }
 
 test "negative: immediate out of range" {
-    try compileExpectError(neg_imm_range, "out of range");
+    try assembleExpectError(neg_imm_range, "out of range");
 }
 
 test "negative: unknown mnemonic" {
-    try compileExpectError(neg_bad_mnemonic, "unknown");
+    try assembleExpectError(neg_bad_mnemonic, "unknown");
 }
 
 test "negative: reserved const name" {
-    try compileExpectError(neg_reserved_const, "reserved");
+    try assembleExpectError(neg_reserved_const, "reserved");
 }
 
 test "negative: duplicate const" {
-    try compileExpectError(neg_dup_const, "duplicate");
+    try assembleExpectError(neg_dup_const, "duplicate");
 }
