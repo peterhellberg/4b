@@ -328,7 +328,7 @@ confirm the middle row of pixels lights up.
 `asm.zig` wraps the pipeline behind one C-ABI entry point:
 
 ```zig
-export fn bc_compile(path: [*:0]const u8, src: [*]const u8, src_len: usize,
+export fn bc_assemble(path: [*:0]const u8, src: [*]const u8, src_len: usize,
                      out: [*]u8, err_buf: ?[*]u8, err_cap: usize) c_int
 ```
 

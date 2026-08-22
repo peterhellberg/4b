@@ -164,5 +164,5 @@ libraries:
   `vm_init`, `vm_tick` and `vm_load_rom`. A unit test pins these offsets so
   the two sides cannot drift apart.
 - **An embedded assembler** — `src/asm.zig` wraps the assembler behind a
-  single C-ABI entry point (`bc_compile`) that returns the 384-byte image
+  single C-ABI entry point (`bc_assemble`) that returns the 384-byte image
   and diagnostics, letting the console assemble `.4a` sources at startup.
