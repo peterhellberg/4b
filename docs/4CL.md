@@ -149,15 +149,42 @@ arithmetic, not an error: `15 + 1 == 0`, `0 - 1 == 15`, `8 << 1 == 0`,
 
 | Range       | Role                                          |
 |-------------|-----------------------------------------------|
-| `r0`–`r13`  | User variables, assigned in declaration order |
-| `r14`–`r15` | Compiler scratch; never visible to 4C programs |
+| `r0`–`r12`  | User variables, assigned in declaration order |
+| `r13`       | Compiler scratch; never visible to 4C programs |
+| `r14`       | Reserved: always zero (`ZERO`)                |
+| `r15`       | Reserved: execution phase latch (`PHASE`)     |
 | `acc`       | Expression evaluator working register         |
 
-- At most **14 variables**. A fifteenth declaration is a compile error.
+- At most **13 variables**. A fourteenth declaration is a compile error.
 - A variable's register is fixed for the whole program; taking its
   "address" is meaningless and impossible.
 - Names must not collide with each other, with keywords, or with builtin
   names. A `const` may not shadow a variable and vice versa.
+
+### 6.1 The phase latch and boot walk
+
+The machine records flag positions at runtime: a `flag` word writes its
+own address into its slot when executed, slots start at 0, and a `jmp`
+to a slot whose flag has never executed lands at address 0. A forward
+jump is therefore only sound once its target flag has executed.
+
+4C guarantees this structurally:
+
+1. At reset every register is 0, so `PHASE` (`r15`) starts at 0.
+2. Every side-effecting word (`sta`, `flip`, `cls`, `read`, `peek`,
+   `halt`'s spin) and every control-transfer `jmp` is preceded by the
+   gate pair `lda r15; ifeq r14`, which skips the gated word while
+   `PHASE` is 0.
+3. Execution therefore walks the whole program once at boot: gates skip
+   all payloads, no effects happen, and every `flag` records its true
+   position.
+4. The walk ends in the epilogue — `lda #1; sta r15; jmp @entry` — which
+   latches `PHASE` to 1 and restarts real execution with every slot
+   valid. From then on all gates pass through and the program runs with
+   exact semantics.
+
+The cost is two words per gated site plus one extra flag slot for the
+entry label; correctness never depends on program shape.
 
 ## 7. Semantics and lowering
 
@@ -216,21 +243,33 @@ opposite row of the table above; also free.
 
 ### 7.3 Control flow
 
-The machine's `flag N` records its own position; `jmp N` lands on that flag
-instruction, which re-executes harmlessly and falls through. Labels
-therefore cost one program word each, inside the flag slot they consume.
+The machine's `flag N` records its own position when executed; `jmp N`
+lands on that flag instruction, which re-executes harmlessly and falls
+through. Labels therefore cost one program word each, inside the flag
+slot they consume.
 
-| Construct            | Flag slots | Shape                                          |
-|----------------------|-----------:|------------------------------------------------|
-| `if (c) s`           | 1          | test, `jmp` to join, body, join                |
-| `if (c) s else t`    | 2          | test, `jmp` else, body, `jmp` join, else, join |
-| `while (c) s`        | 2          | top, test, `jmp` exit, body, `jmp` top, exit   |
-| `break` / `continue` | 0          | `jmp` to the enclosing loop's exit/top         |
-| `halt()`             | 1          | `flag` immediately followed by `jmp` to it     |
+Because slots are pre-recorded by the boot walk (§6.1), every `jmp` below
+is sound regardless of direction. In the shapes, **G** marks the gate
+pair `lda r15; ifeq r14` that prefixes a gated word:
+
+| Construct            | Flag slots | Shape                                                        |
+|----------------------|-----------:|--------------------------------------------------------------|
+| program entry        | 1          | `@entry` flag at the first statement                         |
+| `if (c) s`           | 1          | test, G `jmp` join, body, `flag` join                        |
+| `if (c) s else t`    | 2          | test, G `jmp` else, body, G `jmp` join, else, `flag` join    |
+| `while (c) s`        | 2          | `flag` top, test, G `jmp` exit, body, G `jmp` top, `flag` exit |
+| `break` / `continue` | 0          | G `jmp` to the enclosing loop's exit/top slot                |
+| `halt()`             | 1          | G-spin: `flag`, G `jmp` self                                 |
+
+Every side-effecting word in a body (`sta`, `flip`, `cls`, `read`,
+`peek`) carries its own gate pair; pure evaluation and comparison words
+stay ungated. During the boot walk every gate skips its payload, so the
+walk streams linearly through all shapes above, recording each flag at
+its true position, until the epilogue latches `PHASE`.
 
 Constant conditions fold before lowering: `if (false)` emits nothing,
-`if (true)` emits its body directly, and `while (true)` needs only its top
-slot unless the body contains `break` (which would need an exit slot).
+`if (true)` emits its body directly, and `while (true)` keeps only its
+top slot (its exit join disappears unless the body contains `break`).
 
 Total flag-slot demand is computed at compile time; exceeding **15 slots**
 is a compile error (§10). Slots are numbered in a deterministic preorder
@@ -255,11 +294,12 @@ coordinates from registers. `btn_*` helpers lower to `read` plus shifts
 
 ### 7.5 Evaluation order and expression limits
 
-Operands evaluate left to right, with the running result kept in `acc` and
-at most two live temporaries in `r14`/`r15`. Additive chains flatten
-(§7.1), so depth is bounded in practice; the restrictions in §4.2 remove
-the cases that would need a third temporary. Anything else is a compile
-error ("expression too complex"), not silent misbehavior.
+Operands evaluate left to right, with the running result kept in `acc`
+and at most one live temporary in `r13` (§6). `r14`/`r15` are reserved by
+the phase machinery and never hold expression state. Additive chains
+flatten (§7.1), so depth is bounded in practice; the restrictions in
+§4.2 remove the cases that would need a second temporary. Anything else
+is a compile error ("expression too complex"), not silent misbehavior.
 
 ## 8. Builtins and reserved names
 
@@ -295,8 +335,8 @@ fn main() {
 }
 ```
 
-Cost: 5 flag slots (1 for the folded `while (true)`, 1 per `if`) and
-comfortably under 256 instructions.
+Cost: 6 flag slots (`@entry`, the folded `while (true)` top, and one join
+per `if`) and comfortably under 256 instructions including gates.
 
 ### 9.2 Button steering
 
@@ -338,16 +378,16 @@ fn main() {
 }
 ```
 
-Cost: 2 flag slots (one for the `if`, one for `halt`). Note that `UP` is a
-const, so `(b & UP)` satisfies the mask rule after folding.
+Cost: 3 flag slots (`@entry`, the `if` join, and `halt`). Note that `UP`
+is a const, so `(b & UP)` satisfies the mask rule after folding.
 
 ## 10. Limits and compile-time errors
 
 | Limit/rule                            | Value                   |
 |---------------------------------------|-------------------------|
 | Program size                          | ≤ 256 instructions      |
-| Variables                             | ≤ 14 (registers r0–r13) |
-| Flag slots (loops, branches, dynamic ops, `halt`) | ≤ 15 total  |
+| Variables                             | ≤ 13 (registers r0–r12) |
+| Flag slots (entry, loops, branches, dynamic ops, `halt`) | ≤ 15 total |
 | Literals                              | 4-bit (0–15)            |
 | `&` mask literals                     | contiguous set bits     |
 | Shift right-hand side                 | literal or bare variable |
@@ -357,7 +397,7 @@ duplicate variable or const; keyword or builtin used as a name; missing
 `fn main`; assignment to a non-variable; wrong builtin arity; `break` /
 `continue` outside a loop; non-constant global initializer; non-contiguous
 or non-literal `&` mask; complex shift distance; discarded builtin result;
-more than 14 variables; flag-slot exhaustion (with a per-construct tally);
+more than 13 variables; flag-slot exhaustion (with a per-construct tally);
 program exceeding 256 instructions.
 
 ## 11. Files and tooling
