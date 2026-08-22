@@ -30,7 +30,7 @@ construct costs.
 2. No functions. A program is a set of declarations plus one mandatory
    `main` body (the machine cannot call or return).
 3. Variables live in registers; temporaries borrow two reserved registers.
-4. Control flow is structured (`if`, `while`); each construct spends a
+4. Control flow is structured (`if`, `for`); each construct spends a
    fixed, documented number of the machine's 15 usable flag slots.
 5. Nothing hidden: §7 lists the lowering of every operator, and how many
    flag slots and instructions it costs.
@@ -49,7 +49,7 @@ construct costs.
   (  )  {  }  ;  ,  =  +=  -=  ==  !=  <  >  <=  >=  &&  ||  !  +  -  <<  >>  &
   ```
 
-- Keywords: `u4 fn const if else while break continue true false`.
+- Keywords: `u4 fn const for if else break continue`.
 - Builtin names are reserved identifiers (§8): `cls flip peek buttons
   btn_left btn_right btn_up btn_down halt`.
 
@@ -78,7 +78,7 @@ block      := "{" { stmt } "}"
 ```ebnf
 stmt    := assign ";"
          | "if" "(" cond ")" stmt [ "else" stmt ]
-         | "while" "(" cond ")" stmt
+         | "for" "(" ")" stmt
          | "break" ";" | "continue" ";"
          | voidcall ";"
          | block
@@ -89,7 +89,7 @@ voidcall := "cls" "(" ")"
           | "halt" "(" ")"
 ```
 
-- `break` and `continue` are legal only inside a `while`.
+- `break` and `continue` are legal only inside a `for`.
 - Expressions that produce a value (`peek`, `buttons`, `btn_*`) may not be
   used as statements; discarding a result is a compile error.
 - There is no comma operator, no `++`/`--`, no `for`. `x += 1;` is the idiom.
@@ -102,7 +102,7 @@ addexpr := bandexpr { ("+" | "-") bandexpr }
 bandexpr:= shexpr [ "&" INT ]
 shexpr  := unexpr { ("<<" | ">>") unexpr }
 unexpr  := [ "-" ] prim
-prim    := INT | "true" | "false" | IDENT | retcall | "(" value ")"
+prim    := INT | IDENT | retcall | "(" value ")"
 retcall := "peek" "(" value "," value ")"
          | "buttons" "(" ")"
          | "btn_left" "(" ")" | "btn_right" "(" ")"
@@ -128,7 +128,7 @@ cond       := condb
 condb      := conda { "||" conda }
 conda      := condn { "&&" condn }
 condn      := [ "!" ] condp
-condp      := "(" cond ")" | comparison | value | "true" | "false"
+condp      := "(" cond ")" | comparison | value
 comparison := value relop value
 relop      := "==" | "!=" | "<" | ">" | "<=" | ">="
 ```
@@ -137,7 +137,6 @@ relop      := "==" | "!=" | "<" | ">" | "<=" | ">="
 - `&&` and `||` **short-circuit**: the right operand is not evaluated when
   the left decides the result. `!` negates a condition. All three are legal
   only in condition position; booleans are not ordinary values in v0.1.
-- `true` and `false` are the literals `1` and `0`.
 
 ## 5. Types and values
 
@@ -263,7 +262,7 @@ guard `lda #1; ifgt r15` (conditional exits) or `lda r14; ifgt r15`
 | program entry        | 1          | `@entry` flag at the first statement                         |
 | `if (c) s`           | 1          | test, G `jmp` join, body, `flag` join                        |
 | `if (c) s else t`    | 2          | test, G `jmp` else, body, G `jmp` join, else, `flag` join    |
-| `while (c) s`        | 2          | `flag` top, test, G `jmp` exit, body, G `jmp` top, `flag` exit |
+| `for { s }`          | 1          | `flag` top, body, G `jmp` top                                 |
 | `break` / `continue` | 0          | G `jmp` to the enclosing loop's exit/top slot                |
 | `halt()`             | 1          | spin: `flag`, `jmp` self                                     |
 
@@ -273,9 +272,9 @@ suppresses its forward jump, so the walk streams linearly through all
 shapes above — running the body's effects exactly once — recording each
 flag at its true position, until the epilogue latches `PHASE`.
 
-Constant conditions fold before lowering: `if (false)` emits nothing,
-`if (true)` emits its body directly, and `while (true)` keeps only its
-top slot (its exit join disappears unless the body contains `break`).
+Constant conditions fold before lowering: `if (false)` emits nothing and
+`if (true)` emits its body directly. `for` is always infinite; its exit
+slot appears only when the body contains `break`.
 
 Total flag-slot demand is computed at compile time; exceeding **15 slots**
 is a compile error (§10). Slots are numbered in a deterministic preorder
@@ -320,30 +319,25 @@ plus the keywords from §3. None may be declared as a variable or const.
 
 ## 9. Examples
 
-### 9.1 Bouncing pixel
+### 9.1 Diagonal line
 
 ```c
-// bounce.4c - a pixel moving diagonally, wrapping at edges
-u4 x  = 0;
-u4 y  = 8;
-u4 dx = 1;
-u4 dy = 1;
+// bounce.4c     ; line moving diagonally, wrapping at edges
+u4 x = 0;
+u4 y = 0;
 
 fn main() {
-    while (true) {
+    for {
         flip(x, y);
-        x += dx;
-        y += dy;
-        if (x == 15) { dx = 15; }   // 15 is -1 mod 16
-        if (x == 0)  { dx = 1;  }
-        if (y == 15) { dy = 15; }
-        if (y == 0)  { dy = 1;  }
+        x += 1;
+        y += 1;
     }
 }
 ```
 
-Cost: 6 flag slots (`@entry`, the folded `while (true)` top, and one join
-per `if`) and comfortably under 256 instructions including phase guards.
+Cost: 2 flag slots (`@entry` and the `for` loop's top slot) and well
+under 256 instructions. Since `flip` toggles, each wrap-around sweep
+erases the previous line, so the diagonal blinks as it cycles.
 
 ### 9.2 Button steering
 
@@ -353,7 +347,7 @@ u4 x = 8;
 u4 y = 8;
 
 fn main() {
-    while (true) {
+    for {
         cls();
         flip(x, y);
         if (btn_left())  { x -= 1; }

@@ -3,7 +3,7 @@ u4 x = 0;
 u4 y = 0;
 
 fn main() {
-    while (true) {
+    for {
         flip(x, y);
         x += 1;
         y += 1;

@@ -114,7 +114,6 @@ pub const Codegen = struct {
     fn evalExpr(self: *Codegen, e: *const Expr, line: u32, col: u32) Error!void {
         switch (e.*) {
             .int => |k| _ = try self.w(.lda_imm, k, 0),
-            .boolean => |b| _ = try self.w(.lda_imm, @intFromBool(b), 0),
             .variable => |r| _ = try self.w(.lda_mem, @intCast(r), 0),
             .buttons => {
                 _ = try self.w(.read, 0, 0);
@@ -249,9 +248,6 @@ pub const Codegen = struct {
     /// Every emitted jmp word index lands in `patches` for later fixup.
     fn branchTrue(self: *Codegen, c: *const Cond, patches: *std.ArrayList(usize), line: u32, col: u32) Error!void {
         switch (c.*) {
-            .boolean => |b| {
-                if (b) try self.uncondPatch(patches);
-            },
             .truthy => |e| {
                 // Fast path: btn_*() leaves acc = 0/1, so the phase guard
                 // alone selects — `ifgt r15` fires the exit iff PHASE(1) is
@@ -302,9 +298,6 @@ pub const Codegen = struct {
 
     fn branchFalse(self: *Codegen, c: *const Cond, patches: *std.ArrayList(usize), line: u32, col: u32) Error!void {
         switch (c.*) {
-            .boolean => |b| {
-                if (!b) try self.uncondPatch(patches);
-            },
             .truthy => |e| {
                 // !(e != 0) is e == 0
                 try self.cmpBranch(.eq, e, &zero_expr, patches, line, col);
@@ -422,7 +415,7 @@ pub const Codegen = struct {
             .assign => |a| try self.assignStmt(a.reg, a.op, a.value, s.line, s.col),
             .voidcall => |vc| try self.voidCall(vc, s.line, s.col),
             .if_stmt => |i| try self.ifStmt(i.cond, i.then_stmt, i.else_stmt, s.line, s.col),
-            .while_stmt => |wh| try self.whileStmt(wh.cond, wh.body, s.line, s.col),
+            .for_stmt => |f| try self.forStmt(f.body),
             .brk => {
                 var idx: usize = undefined;
                 try self.phaseJump(&idx);
@@ -648,16 +641,6 @@ pub const Codegen = struct {
     }
 
     fn ifStmt(self: *Codegen, cond: *const Cond, then_s: *const Stmt, else_s: ?*const Stmt, line: u32, col: u32) Error!void {
-        if (cond.* == .boolean) {
-            if (cond.boolean) {
-                try self.stmt(then_s);
-            } else if (else_s) |e| {
-                try self.stmt(e);
-            }
-
-            return;
-        }
-
         if (else_s) |e| {
             // [test][G jmp B][THEN][G jmp J][B flag][ELSE][J flag]
             const patches = try self.jumpIfTrue(cond, line, col);
@@ -689,39 +672,23 @@ pub const Codegen = struct {
         }
     }
 
-    fn whileStmt(self: *Codegen, cond: *const Cond, body: *const Stmt, line: u32, col: u32) Error!void {
-        const folded_true = cond.* == .boolean and cond.boolean;
-        const folded_false = cond.* == .boolean and !cond.boolean;
-
-        // T flag (continue target)
+    fn forStmt(self: *Codegen, body: *const Stmt) Error!void {
+        // The only loop form: `for { ... }` — an infinite loop. Its exit
+        // flag exists only when the body contains break.
         const top = try self.flag(body.line, body.col);
-
-        // test -> exit jump (EXIT slot allocated after body/backedge)
-        var exit_patches = std.ArrayList(usize).empty;
-        if (!folded_true) {
-            if (folded_false) {
-                try self.uncondPatch(&exit_patches);
-            } else {
-                try self.branchTrue(cond, &exit_patches, line, col);
-            }
-        }
 
         try self.loops.append(self.alloc, .{ .top_slot = top });
         try self.stmt(body);
 
         const done = self.loops.pop() orelse unreachable;
 
-        // backedge — backward reference, always safe, stays ungated
         var back_idx: usize = undefined;
         try self.phaseJump(&back_idx);
         self.patchJmp(back_idx, top);
 
-        // EXIT flag: needed unless while(true) without break
-        const has_breaks = done.brk_patches.items.len > 0;
-        if (!folded_true or has_breaks) {
+        if (done.brk_patches.items.len > 0) {
             const exit = try self.flag(body.line, body.col);
 
-            for (exit_patches.items) |idx| self.patchJmp(idx, exit);
             for (done.brk_patches.items) |idx| self.patchJmp(idx, exit);
         }
     }

@@ -125,8 +125,8 @@ soon as any exist.
 
 ## 8. Lexer
 
-Token kinds: identifiers; keywords (`u4 fn const if else while break
-continue true false`); integer literals; multi-char operators
+Token kinds: identifiers; keywords (`u4 fn const for if else break
+continue`); integer literals; multi-char operators
 (`== != <= >= && || << >> += -=`); single-char sigils
 `( ) { } ; , = + - ! < > &`. Maximal munch: two-char operators are tried
 before their prefixes. Identifiers are case-sensitive. Number shape
@@ -183,7 +183,7 @@ Sema walks the program once and produces the analyzed form:
 3. **Expression checks.** `&` right operand is an integer literal with
    contiguous set bits; shift distance is a literal or bare variable;
    builtin arity per signature table.
-4. **Control checks.** `break`/`continue` only inside `while` (loop depth
+4. **Control checks.** `break`/`continue` only inside `for` (loop depth
    tracked during the walk); exactly one `fn main` present.
 
 ## 11. Register allocation
@@ -223,7 +223,7 @@ fn slot() u4 {
 Only *forward* jumps are phase-guarded — they are the only words that can
 outrun their target flag during the boot walk. Two guard forms exist:
 
-- **Conditional exits** (`if`/`while` joins): `lda #1; ifgt r15; jmp S`.
+- **Conditional exits** (`if` joins): `lda #1; ifgt r15; jmp S`.
   The condition's own skip decides whether the `lda #1` runs, so the jump
   fires iff the condition is false and `PHASE` is 1.
 - **Unconditional forward jumps** (`break`, `continue`, the dynamic
@@ -292,7 +292,7 @@ Lowering catalog (normative shapes are in `docs/4CL.md` §7):
   which emits the predicate plus the guarded conditional-exit `jmp` for
   every condition shape; `&&`/`||` chains recurse with the *same*
   `false_slot`, which is what makes them free.
-- **if / while / break / continue**: templates from `docs/4CL.md` §7.3;
+- **if / for / break / continue**: templates from `docs/4CL.md` §7.3;
   `break` emits a phase-guarded `jmp` to the enclosing loop's exit slot,
   `continue` to its top slot. Folded constants skip straight to the
   surviving template.
@@ -400,4 +400,4 @@ be recorded here once `4c` exists, as done for `4a` in `docs/4AD.md` §18.
   `x * 2`-style idioms)? v0.1 has no multiplication, so moot for now.
 - Warning-level diagnostics (unused variable/const, unreachable statements
   after `halt()`)? Easy to add; low urgency.
-- A `for` loop or `do/while` sugar — only if real programs feel the lack.
+- Conditional `for` sugar — only if real programs feel the lack.

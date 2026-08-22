@@ -9,7 +9,7 @@ endif
 syn case match
 
 syn keyword c4Type u4
-syn keyword c4Keyword fn const if else while break continue true false
+syn keyword c4Keyword fn const for if else break continue
 syn keyword c4Builtin cls flip peek halt buttons btn_left btn_right btn_up btn_down
 
 " Function name after `fn`.

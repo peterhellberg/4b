@@ -4,7 +4,7 @@ u4 x = 8;
 u4 y = 8;
 
 fn main() {
-  while (true) {
+  for {
     cls();
     flip(x, y);
     

@@ -23,7 +23,6 @@ pub const Expr = struct {
 
 pub const ExprKind = union(enum) {
     int: u64,
-    boolean: bool,
     variable: []const u8,
     peek: struct { x: *Expr, y: *Expr },
     buttons,
@@ -61,7 +60,7 @@ pub const Stmt = struct {
 pub const StmtKind = union(enum) {
     assign: struct { target: []const u8, op: AssignOp, value: *Expr },
     if_stmt: struct { cond: *Cond, then_stmt: *Stmt, else_stmt: ?*Stmt },
-    while_stmt: struct { cond: *Cond, body: *Stmt },
+    for_stmt: struct { body: *Stmt },
     brk,
     cont,
     voidcall: VoidCall,

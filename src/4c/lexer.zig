@@ -10,11 +10,9 @@ pub const Kind = enum {
     kw_const,
     kw_if,
     kw_else,
-    kw_while,
+    kw_for,
     kw_break,
     kw_continue,
-    kw_true,
-    kw_false,
     // punctuation and operators
     lparen,
     rparen,
@@ -65,11 +63,9 @@ fn keywordKind(text: []const u8) ?Kind {
         .{ "const", Kind.kw_const },
         .{ "if", Kind.kw_if },
         .{ "else", Kind.kw_else },
-        .{ "while", Kind.kw_while },
+        .{ "for", Kind.kw_for },
         .{ "break", Kind.kw_break },
         .{ "continue", Kind.kw_continue },
-        .{ "true", Kind.kw_true },
-        .{ "false", Kind.kw_false },
     };
     inline for (map) |entry| {
         if (std.mem.eql(u8, text, entry[0])) return entry[1];

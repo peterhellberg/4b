@@ -20,7 +20,6 @@ pub const ShiftDist = union(enum) {
 pub const Expr = union(enum) {
     int: u4,
     variable: u8,
-    boolean: bool,
     buttons,
     btn: Btn,
     peek: struct { x: *Expr, y: *Expr },
@@ -31,7 +30,7 @@ pub const Expr = union(enum) {
 
     pub fn isAtomic(self: *const Expr) bool {
         return switch (self.*) {
-            .int, .boolean, .variable => true,
+            .int, .variable => true,
             else => false,
         };
     }
@@ -46,7 +45,6 @@ pub const VoidCall = union(enum) {
 pub const Cond = union(enum) {
     cmp: struct { op: CmpOp, lhs: *Expr, rhs: *Expr },
     truthy: *Expr,
-    boolean: bool,
     not_cond: *Cond,
     and_cond: struct { lhs: *Cond, rhs: *Cond },
     or_cond: struct { lhs: *Cond, rhs: *Cond },
@@ -57,7 +55,7 @@ pub const StmtKind = union(enum) {
     assign: struct { reg: u8, op: AssignOp, value: *Expr },
     voidcall: VoidCall,
     if_stmt: struct { cond: *Cond, then_stmt: *Stmt, else_stmt: ?*Stmt },
-    while_stmt: struct { cond: *Cond, body: *Stmt },
+    for_stmt: struct { body: *Stmt },
     brk,
     cont,
     empty,
@@ -159,7 +157,6 @@ pub const Semer = struct {
                 if (v > 15) return self.err(e.span.line, e.span.col, "value {d} out of range (0..15)", .{v});
                 return @intCast(v);
             },
-            .boolean => |b| return @intFromBool(b),
             .variable => |name| {
                 if (self.consts.get(name)) |v| return v;
                 // distinguish unknown vs non-const variable
@@ -223,7 +220,6 @@ pub const Semer = struct {
                 }
                 break :blk Expr{ .int = @intCast(v) };
             },
-            .boolean => |b| Expr{ .boolean = b },
             .variable => |name| blk: {
                 switch (try self.lookup(name, e.span.line, e.span.col)) {
                     .variable => |reg| break :blk Expr{ .variable = reg },
@@ -349,8 +345,7 @@ pub const Semer = struct {
             },
             .truthy => |e| blk: {
                 const v = try self.convExpr(e);
-                if (v.* == .boolean) break :blk .{ .boolean = v.boolean };
-                if (v.* == .int) break :blk .{ .boolean = v.int != 0 };
+                if (v.* == .int) break :blk .{ .truthy = v };
                 break :blk .{ .truthy = v };
             },
             .not_cond => |inner| .{ .not_cond = try self.convCond(inner) },
@@ -410,10 +405,7 @@ pub const Semer = struct {
                 .then_stmt = try self.convStmt(i.then_stmt),
                 .else_stmt = if (i.else_stmt) |e| try self.convStmt(e) else null,
             } },
-            .while_stmt => |w| .{ .while_stmt = .{
-                .cond = try self.convCond(w.cond),
-                .body = try self.convStmt(w.body),
-            } },
+            .for_stmt => |f| .{ .for_stmt = .{ .body = try self.convStmt(f.body) } },
             .brk => .brk,
             .cont => .cont,
             .empty => .empty,

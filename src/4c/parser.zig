@@ -183,7 +183,7 @@ pub const Parser = struct {
         const t = self.peek();
         switch (t.kind) {
             .kw_if => return self.parseIf(),
-            .kw_while => return self.parseWhile(),
+            .kw_for => return self.parseFor(),
             .kw_break => {
                 _ = self.advance();
                 _ = try self.expect(.semi);
@@ -273,15 +273,16 @@ pub const Parser = struct {
         );
     }
 
-    fn parseWhile(self: *Parser) ParseError!*ast.Stmt {
-        const start = self.advance(); // kw_while
-        _ = try self.expect(.lparen);
-        const cond = try self.parseCond();
-        _ = try self.expect(.rparen);
-        const body = try self.parseStmt();
+    fn parseFor(self: *Parser) ParseError!*ast.Stmt {
+        // The only loop form: `for { ... }` — an infinite loop.
+        const start = self.advance(); // kw_for
+        if (self.peek().kind != .lbrace) {
+            return self.errAt(self.peek(), "expected '{{' after 'for'", .{});
+        }
+        const body = try self.parseBlock();
         return self.mkStmt(
             .{ .line = start.line, .col = start.col },
-            .{ .while_stmt = .{ .cond = cond, .body = body } },
+            .{ .for_stmt = .{ .body = body } },
         );
     }
 
@@ -447,14 +448,6 @@ pub const Parser = struct {
             .number => {
                 _ = self.advance();
                 return self.mkExpr(spanOf(t), .{ .int = t.value });
-            },
-            .kw_true => {
-                _ = self.advance();
-                return self.mkExpr(spanOf(t), .{ .boolean = true });
-            },
-            .kw_false => {
-                _ = self.advance();
-                return self.mkExpr(spanOf(t), .{ .boolean = false });
             },
             .lparen => {
                 _ = self.advance();
