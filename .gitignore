@@ -3,3 +3,4 @@ zig-out
 zig-pkg
 examples/*.4b
 session-*.md
+prompt-*.md
