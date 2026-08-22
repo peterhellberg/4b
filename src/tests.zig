@@ -9,8 +9,11 @@ const orgdw_src = @embedFile("test/golden/orgdw.4a");
 
 fn padBytes(comptime data: []const u8) [384]u8 {
     var img: [384]u8 = undefined;
+
     @memset(&img, 0);
+
     for (data, 0..) |b, i| img[i] = b;
+
     return img;
 }
 
@@ -39,9 +42,13 @@ const orgdw_expected = padBytes(&[_]u8{
 fn compileAndCheck(src: []const u8, expected: *const [384]u8) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
+
     const alloc = arena.allocator();
-    var diag = assembler.diag_mod.Diag.init(alloc, "<test>", src);
+
+    var diag = assembler.diagnostics.Diag.init(alloc, "<test>", src);
+
     const image = try assembler.assemble(alloc, &diag, src);
+
     try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
     try std.testing.expectEqualSlices(u8, expected, &image);
 }
@@ -78,22 +85,31 @@ const neg_dup_const = "const X = 1\nconst X = 2\n";
 fn compileExpectError(src: []const u8, expected_substr: []const u8) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
+
     const alloc = arena.allocator();
-    var diag = assembler.diag_mod.Diag.init(alloc, "<test>", src);
+
+    var diag = assembler.diagnostics.Diag.init(alloc, "<test>", src);
+
     _ = assembler.compile(alloc, &diag, src) catch {};
+
     try std.testing.expect(diag.hasErrors());
+
     var found = false;
+
     for (diag.errors.items) |e| {
         if (std.mem.indexOf(u8, e.msg, expected_substr) != null) {
             found = true;
+
             break;
         }
     }
+
     if (!found) {
         std.debug.print("expected error containing '{s}', got errors:\n", .{expected_substr});
         for (diag.errors.items) |e| {
             std.debug.print("  {s}\n", .{e.msg});
         }
+
         return error.TestUnexpectedError;
     }
 }
