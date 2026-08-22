@@ -40,7 +40,7 @@ pub fn write(
             },
             .flag, .jmp => {
                 try w.splatByteAll(' ', MNEMONIC_WIDTH - m.len);
-                try w.print("@{d}", .{a});
+                try w.print("{d}", .{a});
             },
         }
 
@@ -63,10 +63,5 @@ fn mnemonic(op: isa.Op) []const u8 {
 }
 
 fn writeReg(w: *std.Io.Writer, reg: u4) (std.mem.Allocator.Error || std.Io.Writer.Error)!void {
-    switch (reg) {
-        13 => try w.writeAll("scratch"),
-        14 => try w.writeAll("zero"),
-        15 => try w.writeAll("phase"),
-        else => try w.print("r{d}", .{reg}),
-    }
+    try w.print("r{d}", .{reg});
 }
