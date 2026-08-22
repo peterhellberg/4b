@@ -1,17 +1,18 @@
-; bounce.4b - pixel moving diagonally, wrapping at edges
+; bounce.4a     ; line moving diagonally, wrapping at edges
+
 lda #0
-sta r0
-sta r1
+sta r1          ; x = 0
+sta r2          ; y = 0
 
 @loop:
-flip r0, r1
+  flip r1, r2   ; flip pixel (x, y)
+  
+  lda r1        ; x++
+  inc
+  sta r1
+  
+  lda r2        ; y++
+  inc
+  sta r2
 
-lda r0
-inc
-sta r0
-
-lda r1
-inc
-sta r1
-
-jmp @loop
+  jmp @loop     ; repeat

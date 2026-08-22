@@ -1,18 +1,37 @@
-; line.4b - horizontal line across the middle
-lda #8
-sta r1
-lda #0
-sta r2
-sta r3
+; line.4a       ; horizontal line across the middle
+
+@start:
+  lda #7
+  sta r1        ; y = 7
+
+  lda #0
+  sta r2        ; x = 0
+  sta r3        ; loop sentinel
+  sta r4        ; inner = 0
+
+  lda #11       ; outer start
+  sta r5        ; outer = 11
 
 @draw:
-lda r2
-sta r0
-flip r0, r1
-inc
-sta r2
-iflt r3         ; loop while new x > 0 (exit when it wraps to 0)
-jmp @draw
+  lda r2        ; x
+  sta r0
+  flip r0, r1   ; flip pixel (x, y)
+  inc           ; x++
+  sta r2
+  iflt r3       ; x > 0
+  jmp @draw
 
-@halt:
-jmp @halt
+@wait:
+  lda r4
+  inc
+  sta r4        ; inner++
+  iflt r3       ; inner > 0
+  jmp @wait
+
+  lda r5
+  inc
+  sta r5        ; outer++
+  iflt r3       ; outer > 0
+  jmp @wait
+
+jmp @start      ; repeat

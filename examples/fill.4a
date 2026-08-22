@@ -1,25 +1,26 @@
-; fill.4b - fill the entire screen
-lda #0
-sta r1
-sta r3
+; fill.4a       ; fill the entire screen
+
+@start:         
+  lda #0
+  sta r1        ; y = 0
+  sta r2        ; sentinel
 
 @row:
-lda #0
-sta r2
+  lda #0
+  sta r0        ; x = 0
 
 @col:
-flip r2, r1
-inc
-sta r2
-lda r2
-iflt r3         ; x > 0? next column
-jmp @col
+  flip r0, r1
+  inc
+  sta r0
+  lda r0
+  iflt r2       ; x > 0
+  jmp @col
 
-lda r1
-inc
-sta r1          ; y++
-iflt r3         ; y > 0? next row
-jmp @row
+  lda r1
+  inc
+  sta r1        ; y++
+  iflt r2       ; y > 0
+  jmp @row
 
-@halt:
-jmp @halt
+  jmp @start    ; repeat
