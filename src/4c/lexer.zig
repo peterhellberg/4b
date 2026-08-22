@@ -1,5 +1,5 @@
 const std = @import("std");
-const diag_mod = @import("../diag.zig");
+const diagnostics = @import("../diagnostics.zig");
 
 pub const Kind = enum {
     ident,
@@ -79,7 +79,7 @@ fn keywordKind(text: []const u8) ?Kind {
 
 pub const LexError = error{ LexError, OutOfMemory };
 
-pub fn lex(alloc: std.mem.Allocator, diag: *diag_mod.Diag, src: []const u8) LexError!std.ArrayList(Token) {
+pub fn lex(alloc: std.mem.Allocator, diag: *diagnostics.Diag, src: []const u8) LexError!std.ArrayList(Token) {
     var tokens = std.ArrayList(Token).empty;
     var i: usize = 0;
     var line: u32 = 1;

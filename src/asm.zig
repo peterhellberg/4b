@@ -1,8 +1,8 @@
 //! C-ABI wrapper around the 4a assembler, embedded into the 4b console
 //! the same way src/vm.zig is.
 const std = @import("std");
-const compiler = @import("compiler.zig");
-const diag_mod = @import("diag.zig");
+const assembler = @import("assembler.zig");
+const diagnostics = @import("diagnostics.zig");
 
 /// Assemble 4A source into a 384-byte ROM image.
 ///
@@ -23,8 +23,8 @@ export fn bc_compile(
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    var diag = diag_mod.Diag.init(alloc, std.mem.span(path), source);
-    const image = compiler.compile(alloc, &diag, source) catch {
+    var diag = diagnostics.Diag.init(alloc, std.mem.span(path), source);
+    const image = assembler.assemble(alloc, &diag, source) catch {
         writeErrors(&diag, err_buf, err_cap);
         return 1;
     };
@@ -37,7 +37,7 @@ export fn bc_compile(
     return 0;
 }
 
-fn writeErrors(diag: *const diag_mod.Diag, buf: ?[*]u8, cap: usize) void {
+fn writeErrors(diag: *const diagnostics.Diag, buf: ?[*]u8, cap: usize) void {
     const b = buf orelse return;
     if (cap == 0) return;
     var off: usize = 0;

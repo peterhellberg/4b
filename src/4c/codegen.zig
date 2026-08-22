@@ -1,7 +1,7 @@
 const std = @import("std");
+const diagnostics = @import("../diagnostics.zig");
 const model = @import("../model.zig");
 const sema = @import("sema.zig");
-const diag_mod = @import("../diag.zig");
 
 const Expr = sema.Expr;
 const Cond = sema.Cond;
@@ -47,7 +47,7 @@ const LoopCtx = struct {
 
 pub const Codegen = struct {
     alloc: std.mem.Allocator,
-    diag: *diag_mod.Diag,
+    diag: *diagnostics.Diag,
 
     words: std.ArrayList(u16) = .empty,
     slots: std.ArrayList(SlotInfo) = .empty,
@@ -55,6 +55,7 @@ pub const Codegen = struct {
 
     fn err(self: *Codegen, line: u32, col: u32, comptime fmt: []const u8, args: anytype) Error {
         self.diag.err(line, col, fmt, args);
+
         return error.CodegenError;
     }
 
@@ -62,7 +63,9 @@ pub const Codegen = struct {
         if (self.words.items.len >= 256) {
             return self.err(1, 1, "program exceeds 256 words", .{});
         }
+
         try self.words.append(self.alloc, model.encode(op, a, b));
+
         return self.words.items.len - 1;
     }
 
@@ -71,8 +74,11 @@ pub const Codegen = struct {
         if (slot >= MAX_SLOTS) {
             return self.err(line, col, "program needs more than {d} flag slots", .{MAX_SLOTS});
         }
+
         try self.slots.append(self.alloc, .{ .line = line, .col = col });
+
         _ = try self.w(.flag, @intCast(slot), 0);
+
         return slot;
     }
 
@@ -85,6 +91,7 @@ pub const Codegen = struct {
 
     fn gatedJmp(self: *Codegen, patch_idx: *usize) Error!void {
         try self.gate();
+
         patch_idx.* = try self.w(.jmp, 0, 0);
     }
 
@@ -158,18 +165,25 @@ pub const Codegen = struct {
         if (rhs.* == .int) {
             const k: u4 = rhs.int;
             const n: u4 = if (op == .add) k else 0 -% k;
+
             try self.evalExpr(lhs, line, col);
+
             var i: u4 = 0;
+
             while (i < n) : (i += 1) _ = try self.w(.inc, 0, 0);
+
             return;
         }
 
         // Addition commutes, so a constant on the left works too.
         if (op == .add and lhs.* == .int) {
             const k: u4 = lhs.int;
+
             try self.evalExpr(rhs, line, col);
             var i: u4 = 0;
+
             while (i < k) : (i += 1) _ = try self.w(.inc, 0, 0);
+
             return;
         }
 
@@ -182,11 +196,13 @@ pub const Codegen = struct {
     /// assignment target instead (see assignStmt), so value position errors.
     fn evalNeg(self: *Codegen, inner: *const Expr, line: u32, col: u32) Error!void {
         _ = inner;
+
         return self.err(line, col, "expression too complex: unary minus on a runtime value needs an assignment target", .{});
     }
 
     fn evalShift(self: *Codegen, left: bool, operand: *const Expr, dist: sema.ShiftDist, line: u32, col: u32) Error!void {
         const op: model.Op = if (left) .shl else .shr;
+
         switch (dist) {
             .lit => |n| {
                 try self.evalExpr(operand, line, col);
@@ -213,6 +229,7 @@ pub const Codegen = struct {
     /// Unsigned special cases for comparisons against literal zero.
     fn zeroNormalize(op: sema.CmpOp, rhs: *const Expr) ZeroNorm {
         if (rhs.* != .int or rhs.int != 0) return .keep;
+
         return switch (op) {
             .ne => .{ .new_op = .gt },
             .le => .{ .new_op = .eq },
@@ -303,6 +320,7 @@ pub const Codegen = struct {
 
     fn uncondPatch(self: *Codegen, patches: *std.ArrayList(usize)) Error!void {
         var idx: usize = undefined;
+
         try self.gatedJmp(&idx);
         try patches.append(self.alloc, idx);
     }
@@ -367,6 +385,7 @@ pub const Codegen = struct {
         }
 
         var idx: usize = undefined;
+
         try self.gatedJmp(&idx);
         try patches.append(self.alloc, idx);
     }
@@ -410,8 +429,10 @@ pub const Codegen = struct {
                             .variable => |v| v,
                             else => break :blk,
                         };
+
                         try self.assignStmt(reg, .assign, a.lhs, line, col);
                         try self.mutateLoop(r, @intCast(vr), if (a.op == .add) .add else .sub, line, col);
+
                         return;
                     },
                     // x = -B: zero the target, then subtract B times.
@@ -420,10 +441,15 @@ pub const Codegen = struct {
                             .variable => |v| v,
                             else => break :blk,
                         };
+
                         _ = try self.w(.lda_imm, 0, 0);
+
                         try self.gate();
+
                         _ = try self.w(.sta, r, 0);
+
                         try self.mutateLoop(r, @intCast(vr), .sub, line, col);
+
                         return;
                     },
                     // x = e << v / x = e >> v with e atomic.
@@ -432,16 +458,22 @@ pub const Codegen = struct {
                             .reg => |dr| dr,
                             else => break :blk,
                         };
+
                         try self.evalExpr(s.operand, line, col);
                         try self.gate();
+
                         _ = try self.w(.sta, r, 0);
+
                         try self.shiftMutateLoop(r, @intCast(dr), s.left, line, col);
+
                         return;
                     },
                     else => {},
                 }
+
                 try self.evalExpr(value, line, col);
                 try self.gate();
+
                 _ = try self.w(.sta, r, 0);
             },
             .add_assign, .sub_assign => {
@@ -449,15 +481,21 @@ pub const Codegen = struct {
                     .int => |k| {
                         if (k != 0) {
                             const n: u4 = if (op == .add_assign) k else 0 -% k;
+
                             _ = try self.w(.lda_mem, r, 0);
+
                             var i: u4 = 0;
+
                             while (i < n) : (i += 1) _ = try self.w(.inc, 0, 0);
+
                             try self.gate();
+
                             _ = try self.w(.sta, r, 0);
                         }
                     },
                     .variable => |vr| {
                         const mode: sema.ArithOp = if (op == .add_assign) .add else .sub;
+
                         try self.mutateLoop(r, @intCast(vr), mode, line, col);
                     },
                     else => {
@@ -473,33 +511,44 @@ pub const Codegen = struct {
     /// bottom-tested exit when counter == amount.
     fn mutateLoop(self: *Codegen, target: u4, amount_reg: u8, mode: sema.ArithOp, line: u32, col: u32) Error!void {
         const areg: u4 = @intCast(amount_reg);
+
         _ = try self.w(.lda_imm, 0, 0);
         _ = try self.w(.ifgt, areg, 0);
+
         var exit_patch: usize = undefined;
+
         try self.gatedJmp(&exit_patch);
 
         _ = try self.w(.lda_imm, 0, 0);
         _ = try self.w(.sta, SCRATCH, 0);
 
         const top = try self.flag(line, col);
+
         _ = try self.w(.lda_mem, target, 0);
         _ = try self.w(.inc, 0, 0);
+
         if (mode == .sub) {
             var i: u4 = 0;
             while (i < 14) : (i += 1) _ = try self.w(.inc, 0, 0);
         }
+
         try self.gate();
+
         _ = try self.w(.sta, target, 0);
 
         _ = try self.w(.lda_mem, SCRATCH, 0);
         _ = try self.w(.inc, 0, 0);
         _ = try self.w(.sta, SCRATCH, 0);
         _ = try self.w(.ifeq, areg, 0);
+
         var back_patch: usize = undefined;
+
         try self.gatedJmp(&back_patch);
+
         self.patchJmp(back_patch, top);
 
         const exit = try self.flag(line, col);
+
         self.patchJmp(exit_patch, exit);
     }
 
@@ -511,27 +560,36 @@ pub const Codegen = struct {
 
         _ = try self.w(.lda_imm, 0, 0);
         _ = try self.w(.ifgt, areg, 0);
+
         var exit_patch: usize = undefined;
+
         try self.gatedJmp(&exit_patch);
 
         _ = try self.w(.lda_imm, 0, 0);
         _ = try self.w(.sta, SCRATCH, 0);
 
         const top = try self.flag(line, col);
+
         _ = try self.w(.lda_mem, target, 0);
         _ = try self.w(op, 0, 0);
+
         try self.gate();
+
         _ = try self.w(.sta, target, 0);
 
         _ = try self.w(.lda_mem, SCRATCH, 0);
         _ = try self.w(.inc, 0, 0);
         _ = try self.w(.sta, SCRATCH, 0);
         _ = try self.w(.ifeq, areg, 0);
+
         var back_patch: usize = undefined;
+
         try self.gatedJmp(&back_patch);
+
         self.patchJmp(back_patch, top);
 
         const exit = try self.flag(line, col);
+
         self.patchJmp(exit_patch, exit);
     }
 
@@ -543,13 +601,17 @@ pub const Codegen = struct {
             },
             .halt => {
                 const h = try self.flag(line, col);
+
                 var idx: usize = undefined;
+
                 try self.gatedJmp(&idx);
+
                 self.patchJmp(idx, h);
             },
             .flip => |f| {
                 const xa = f.x.*;
                 const ya = f.y.*;
+
                 if (xa == .variable and ya == .variable) {
                     try self.gate();
                     _ = try self.w(.flip, @intCast(xa.variable), @intCast(ya.variable));
@@ -570,7 +632,9 @@ pub const Codegen = struct {
 
     fn jumpIfTrue(self: *Codegen, cond: *const Cond, line: u32, col: u32) Error!std.ArrayList(usize) {
         var patches = std.ArrayList(usize).empty;
+
         try self.branchTrue(cond, &patches, line, col);
+
         return patches;
     }
 
@@ -581,25 +645,37 @@ pub const Codegen = struct {
             } else if (else_s) |e| {
                 try self.stmt(e);
             }
+
             return;
         }
 
         if (else_s) |e| {
             // [test][G jmp B][THEN][G jmp J][B flag][ELSE][J flag]
             const patches = try self.jumpIfTrue(cond, line, col);
+
             try self.stmt(then_s);
+
             var join_patch: usize = undefined;
+
             try self.gatedJmp(&join_patch);
+
             const else_slot = try self.flag(e.line, e.col);
+
             try self.stmt(e);
+
             const join_slot = try self.flag(line, col);
+
             for (patches.items) |idx| self.patchJmp(idx, else_slot);
+
             self.patchJmp(join_patch, join_slot);
         } else {
             // [test][G jmp J][THEN][J flag]
             const patches = try self.jumpIfTrue(cond, line, col);
+
             try self.stmt(then_s);
+
             const join_slot = try self.flag(line, col);
+
             for (patches.items) |idx| self.patchJmp(idx, join_slot);
         }
     }
@@ -623,17 +699,20 @@ pub const Codegen = struct {
 
         try self.loops.append(self.alloc, .{ .top_slot = top });
         try self.stmt(body);
+
         const done = self.loops.pop() orelse unreachable;
 
         // backedge
         var back_patch: usize = undefined;
         try self.gatedJmp(&back_patch);
+
         self.patchJmp(back_patch, top);
 
         // EXIT flag: needed unless while(true) without break
         const has_breaks = done.brk_patches.items.len > 0;
         if (!folded_true or has_breaks) {
             const exit = try self.flag(body.line, body.col);
+
             for (exit_patches.items) |idx| self.patchJmp(idx, exit);
             for (done.brk_patches.items) |idx| self.patchJmp(idx, exit);
         }
@@ -642,7 +721,7 @@ pub const Codegen = struct {
 
 pub fn generate(
     alloc: std.mem.Allocator,
-    diag: *diag_mod.Diag,
+    diag: *diagnostics.Diag,
     prog: sema.Prog,
 ) Error!Result {
     var cg = Codegen{ .alloc = alloc, .diag = diag };

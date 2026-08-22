@@ -1,17 +1,17 @@
 const std = @import("std");
-const tok_mod = @import("lexer.zig");
+const lexer = @import("lexer.zig");
 const ast = @import("ast.zig");
-const diag_mod = @import("../diag.zig");
+const diagnostics = @import("../diagnostics.zig");
 
-const Token = tok_mod.Token;
-const Kind = tok_mod.Kind;
+const Token = lexer.Token;
+const Kind = lexer.Kind;
 const Span = ast.Span;
 
 pub const ParseError = error{ ParseError, OutOfMemory };
 
 pub fn parse(
     alloc: std.mem.Allocator,
-    diag: *diag_mod.Diag,
+    diag: *diagnostics.Diag,
     tokens: []const Token,
 ) ParseError!*ast.Program {
     var p = Parser{ .alloc = alloc, .diag = diag, .tokens = tokens, .pos = 0 };
@@ -20,7 +20,7 @@ pub fn parse(
 
 pub const Parser = struct {
     alloc: std.mem.Allocator,
-    diag: *diag_mod.Diag,
+    diag: *diagnostics.Diag,
     tokens: []const Token,
     pos: usize,
 

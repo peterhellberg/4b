@@ -8,12 +8,16 @@ pub fn write(
     out: *std.ArrayList(u8),
 ) (std.mem.Allocator.Error || std.Io.Writer.Error)!void {
     var aw: std.Io.Writer.Allocating = .fromArrayList(alloc, out);
+
     const w = &aw.writer;
+
     for (words, 0..) |word, i| {
         const op: u4 = @intCast((word >> 8) & 0xF);
         const a: u4 = @intCast((word >> 4) & 0xF);
         const b: u4 = @intCast(word & 0xF);
+
         try w.print("    ; {d: >3}\n    ", .{i});
+
         switch (@as(model.Op, @enumFromInt(op))) {
             .nop => try w.print("nop", .{}),
             .lda_mem => {
@@ -57,8 +61,10 @@ pub fn write(
                 try writeReg(w, a);
             },
         }
+
         try w.print("\n", .{});
     }
+
     out.* = aw.toArrayList();
 }
 

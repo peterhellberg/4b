@@ -1,6 +1,6 @@
 const std = @import("std");
-const compiler = @import("compiler.zig");
-const vm_mod = @import("vm.zig");
+const assembler = @import("assembler.zig");
+const machine = @import("vm.zig");
 
 const move_src =
     \\; move.4a       ; steer a single pixel with the arrow keys
@@ -133,11 +133,11 @@ test "probe: move.4a boot trace" {
     defer arena.deinit();
     const alloc = arena.allocator();
 
-    var diag = compiler.diag_mod.Diag.init(alloc, "<probe>", move_src);
-    const image = try compiler.compile(alloc, &diag, move_src);
+    var diag = assembler.diagnostics.Diag.init(alloc, "<probe>", move_src);
+    const image = try assembler.assemble(alloc, &diag, move_src);
 
-    var vm: vm_mod.VM = undefined;
-    vm_mod.vm_load_rom(&vm, &image, image.len);
+    var vm: machine.VM = undefined;
+    machine.vm_load_rom(&vm, &image, image.len);
 
     var visited: [256]bool = @splat(false);
     var pc_hist: [48]u8 = undefined;
@@ -149,7 +149,7 @@ test "probe: move.4a boot trace" {
             pc_hist[hist_len] = vm.pc;
             hist_len += 1;
         }
-        vm_mod.vm_tick(&vm);
+        machine.vm_tick(&vm);
     }
 
     std.debug.print("\npc history (first {d} ticks): ", .{hist_len});

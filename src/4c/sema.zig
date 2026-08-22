@@ -1,6 +1,6 @@
 const std = @import("std");
 const ast = @import("ast.zig");
-const diag_mod = @import("../diag.zig");
+const diagnostics = @import("../diagnostics.zig");
 
 pub const Error = error{ SemaError, OutOfMemory };
 
@@ -88,8 +88,8 @@ const Symbol = union(enum) {
 };
 
 const reserved = [_][]const u8{
-    "cls",       "flip",      "peek",     "buttons", "btn_left",
-    "btn_right", "btn_up",    "btn_down", "halt",    "main",
+    "cls",       "flip",   "peek",     "buttons", "btn_left",
+    "btn_right", "btn_up", "btn_down", "halt",    "main",
 };
 
 fn isReserved(name: []const u8) bool {
@@ -101,7 +101,7 @@ fn isReserved(name: []const u8) bool {
 
 pub const Semer = struct {
     alloc: std.mem.Allocator,
-    diag: *diag_mod.Diag,
+    diag: *diagnostics.Diag,
     consts: std.StringHashMapUnmanaged(u4),
     scopes: std.ArrayList(Scope) = .empty,
     next_reg: u8 = 0,

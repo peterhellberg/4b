@@ -1,8 +1,8 @@
 const std = @import("std");
-const compiler = @import("compiler.zig");
-const compiler_4c = @import("4c/compiler.zig");
-const asmout_4c = @import("4c/asmout.zig");
-const diag_mod = @import("diag.zig");
+const assembler = @import("assembler.zig");
+const compiler = @import("4c/compiler.zig");
+const asmout = @import("4c/asmout.zig");
+const diagnostics = @import("diagnostics.zig");
 
 comptime {
     _ = @import("tests.zig");
@@ -15,9 +15,15 @@ const Options = struct {
 };
 
 pub fn main(args: std.process.Init) u8 {
-    var opts = Options{ .input = null, .output = null, .emit_asm = null };
+    var opts = Options{
+        .input = null,
+        .output = null,
+        .emit_asm = null,
+    };
+
     var it = args.minimal.args.iterate();
     _ = it.next();
+
     while (it.next()) |arg| {
         if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
             printUsage();
@@ -63,12 +69,12 @@ pub fn main(args: std.process.Init) u8 {
         return 1;
     };
 
-    var diag = diag_mod.Diag.init(alloc, input_path, src);
+    var diag = diagnostics.Diag.init(alloc, input_path, src);
 
     const is_4c = std.mem.endsWith(u8, input_path, ".4c");
 
     if (is_4c) {
-        const out = compiler_4c.compileWords(alloc, &diag, src) catch |e| switch (e) {
+        const out = compiler.compileWords(alloc, &diag, src) catch |e| switch (e) {
             error.CompileFailed => {
                 diag.printAll();
                 return 1;
@@ -86,7 +92,7 @@ pub fn main(args: std.process.Init) u8 {
 
         if (opts.emit_asm) |path| {
             var text = std.ArrayList(u8).empty;
-            asmout_4c.write(alloc, out.words, &text) catch {
+            asmout.write(alloc, out.words, &text) catch {
                 std.debug.print("error: out of memory\n", .{});
                 return 1;
             };
@@ -98,17 +104,22 @@ pub fn main(args: std.process.Init) u8 {
 
         var image: [384]u8 = undefined;
         @import("encoder.zig").pack(out.words, &image);
+
         const output_path = opts.output orelse defaultOutput(alloc, input_path);
+
         std.Io.Dir.cwd().writeFile(io, .{
             .sub_path = output_path,
             .data = &image,
         }) catch |e| {
-            std.debug.print("error: cannot write '{s}': {s}\n", .{ output_path, @errorName(e) });
+            std.debug.print("error: cannot write '{s}': {s}\n", .{
+                output_path,
+                @errorName(e),
+            });
             return 1;
         };
     } else {
-        const image = compiler.compile(alloc, &diag, src) catch |e| switch (e) {
-            error.CompileFailed => {
+        const image = assembler.assemble(alloc, &diag, src) catch |e| switch (e) {
+            error.AssembleFailed => {
                 diag.printAll();
                 return 1;
             },
@@ -124,11 +135,15 @@ pub fn main(args: std.process.Init) u8 {
         }
 
         const output_path = opts.output orelse defaultOutput(alloc, input_path);
+
         std.Io.Dir.cwd().writeFile(io, .{
             .sub_path = output_path,
             .data = &image,
         }) catch |e| {
-            std.debug.print("error: cannot write '{s}': {s}\n", .{ output_path, @errorName(e) });
+            std.debug.print("error: cannot write '{s}': {s}\n", .{
+                output_path,
+                @errorName(e),
+            });
             return 1;
         };
     }
@@ -141,6 +156,7 @@ fn writeOutput(io: std.Io, path: []const u8, data: []const u8) !void {
         try std.Io.File.stdout().writeStreamingAll(io, data);
         return;
     }
+
     try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = data });
 }
 
@@ -149,7 +165,10 @@ fn defaultOutput(alloc: std.mem.Allocator, input_path: []const u8) []const u8 {
         dot
     else
         input_path.len;
-    return std.fmt.allocPrint(alloc, "{s}.4b", .{input_path[0..stem_len]}) catch return input_path;
+
+    return std.fmt.allocPrint(alloc, "{s}.4b", .{
+        input_path[0..stem_len],
+    }) catch return input_path;
 }
 
 fn printUsage() void {

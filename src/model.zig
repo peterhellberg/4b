@@ -56,6 +56,7 @@ pub fn lookupSpec(name: []const u8) ?Spec {
     for (specs) |s| {
         if (std.ascii.eqlIgnoreCase(name, s.mnemonic)) return s;
     }
+
     return null;
 }
 

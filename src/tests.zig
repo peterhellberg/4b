@@ -1,5 +1,5 @@
 const std = @import("std");
-const compiler = @import("compiler.zig");
+const assembler = @import("assembler.zig");
 
 const line_src = @embedFile("test/golden/line.4a");
 const buttons_src = @embedFile("test/golden/buttons.4a");
@@ -40,8 +40,8 @@ fn compileAndCheck(src: []const u8, expected: *const [384]u8) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
-    var diag = compiler.diag_mod.Diag.init(alloc, "<test>", src);
-    const image = try compiler.compile(alloc, &diag, src);
+    var diag = assembler.diag_mod.Diag.init(alloc, "<test>", src);
+    const image = try assembler.assemble(alloc, &diag, src);
     try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
     try std.testing.expectEqualSlices(u8, expected, &image);
 }
@@ -79,8 +79,8 @@ fn compileExpectError(src: []const u8, expected_substr: []const u8) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
     const alloc = arena.allocator();
-    var diag = compiler.diag_mod.Diag.init(alloc, "<test>", src);
-    _ = compiler.compile(alloc, &diag, src) catch {};
+    var diag = assembler.diag_mod.Diag.init(alloc, "<test>", src);
+    _ = assembler.compile(alloc, &diag, src) catch {};
     try std.testing.expect(diag.hasErrors());
     var found = false;
     for (diag.errors.items) |e| {

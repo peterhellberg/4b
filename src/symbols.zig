@@ -1,11 +1,12 @@
 const std = @import("std");
 const model = @import("model.zig");
-const diag_mod = @import("diag.zig");
+const diagnostics = @import("diagnostics.zig");
+
 const Item = model.Item;
 
 const reserved_mnemonics = [_][]const u8{
-    "nop", "lda", "sta", "read", "inc", "cls", "shl", "shr",
-    "peek", "flip", "flag", "jmp", "ifeq", "ifgt", "iflt",
+    "nop",  "lda",  "sta",  "read", "inc",  "cls",  "shl",  "shr",
+    "peek", "flip", "flag", "jmp",  "ifeq", "ifgt", "iflt",
 };
 
 const reserved_directives = [_][]const u8{ "const", "org", "dw" };
@@ -27,9 +28,11 @@ pub fn isReserved(name: []const u8) bool {
     for (reserved_mnemonics) |m| {
         if (std.ascii.eqlIgnoreCase(name, m)) return true;
     }
+
     for (reserved_directives) |d| {
         if (std.ascii.eqlIgnoreCase(name, d)) return true;
     }
+
     if (name.len >= 2 and std.ascii.startsWithIgnoreCase(name, "r")) {
         const digits = name[1..];
         if (digits.len > 0) {
@@ -48,7 +51,7 @@ pub fn isReserved(name: []const u8) bool {
 
 pub const AnalyzeError = error{ AnalyzeError, OutOfMemory };
 
-pub fn analyze(alloc: std.mem.Allocator, diag: *diag_mod.Diag, items: []const Item) AnalyzeError!Symbols {
+pub fn analyze(alloc: std.mem.Allocator, diag: *diagnostics.Diag, items: []const Item) AnalyzeError!Symbols {
     var sym = Symbols.init(alloc);
     var pos: u16 = 0;
 
@@ -120,33 +123,41 @@ pub fn analyze(alloc: std.mem.Allocator, diag: *diag_mod.Diag, items: []const It
     return sym;
 }
 
-fn defineLabel(sym: *Symbols, diag: *diag_mod.Diag, name: []const u8, line: u32, col: u32) ?u4 {
+fn defineLabel(sym: *Symbols, diag: *diagnostics.Diag, name: []const u8, line: u32, col: u32) ?u4 {
     if (isReserved(name)) {
         diag.err(line, col, "reserved name '{s}' cannot be used as a label identifier", .{name});
         return null;
     }
+
     if (sym.labels.get(name)) |existing| {
         diag.err(line, col, "label '@{s}' is already defined", .{name});
         return existing;
     }
+
     if (sym.next_slot > 14) {
         diag.err(line, col, "too many labels (max 15)", .{});
         return null;
     }
+
     const slot = sym.next_slot;
+
     sym.next_slot += 1;
     sym.labels.put(name, slot) catch return null;
+
     return slot;
 }
 
 test "analyze labels and consts" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var diag = diag_mod.Diag.init(arena.allocator(), "<test>", "");
+
+    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "");
+
     const src = "@start:\njmp @start\n";
     const tokens = try @import("lexer.zig").lex(arena.allocator(), &diag, src);
     const items = try @import("parser.zig").parse(arena.allocator(), &diag, tokens.items);
     const sym = try analyze(arena.allocator(), &diag, items.items);
+
     try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
     try std.testing.expectEqual(@as(u4, 0), sym.labels.get("start").?);
     try std.testing.expectEqual(@as(u4, 1), sym.next_slot);
@@ -155,21 +166,29 @@ test "analyze labels and consts" {
 test "reject reserved name as const" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var diag = diag_mod.Diag.init(arena.allocator(), "<test>", "");
+
+    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "");
+
     const src = "const lda = 5\n";
     const tokens = try @import("lexer.zig").lex(arena.allocator(), &diag, src);
     const items = try @import("parser.zig").parse(arena.allocator(), &diag, tokens.items);
+
     _ = try analyze(arena.allocator(), &diag, items.items);
+
     try std.testing.expect(diag.hasErrors());
 }
 
 test "reject flag slot 15" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var diag = diag_mod.Diag.init(arena.allocator(), "<test>", "");
+
+    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "");
+
     const src = "flag 15\n";
     const tokens = try @import("lexer.zig").lex(arena.allocator(), &diag, src);
     const items = try @import("parser.zig").parse(arena.allocator(), &diag, tokens.items);
+
     _ = try analyze(arena.allocator(), &diag, items.items);
+
     try std.testing.expect(diag.hasErrors());
 }

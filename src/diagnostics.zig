@@ -48,6 +48,7 @@ pub const Diag = struct {
                 e.col,
                 e.msg,
             });
+
             if (e.line > 0 and e.line - 1 < self.line_starts.items.len) {
                 const start = self.line_starts.items[e.line - 1];
                 var end: usize = start;
@@ -59,6 +60,7 @@ pub const Diag = struct {
                     const spaces = @min(e.col - 1, 63);
                     @memset(caret[0..spaces], ' ');
                     caret[spaces] = '^';
+
                     std.debug.print("    {s}\n", .{caret[0 .. spaces + 1]});
                 }
             }
