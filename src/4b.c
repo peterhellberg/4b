@@ -160,12 +160,18 @@ static void dump_vm(const VM *vm, long steps, unsigned buttons) {
   }
 }
 
+static void trace_tick(const VM *vm, long n) {
+  printf("%4ld: pc=%3u acc=%u x=%u y=%u\n", n, vm->pc, vm->acc,
+         vm->regs[0] & 0x0F, vm->regs[1] & 0x0F);
+}
+
 int main(int argc, char **argv) {
   const char *rom_path = NULL;
   int scale = DEFAULT_SCALE;
   int speed = DEFAULT_SPEED;
   long debug_steps = -1;
   unsigned buttons_mask = 0;
+  int trace = 0;
   Color fg = {0xd3, 0xc9, 0xa1, 255};
   Color bg = {0x32, 0x3c, 0x39, 255};
   bool help = false;
@@ -186,6 +192,8 @@ int main(int argc, char **argv) {
       if (i + 1 < argc && argv[i + 1][0] != '-') {
         debug_steps = atol(argv[++i]);
       }
+    } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--trace") == 0) {
+      trace = 1;
     } else if ((strcmp(argv[i], "-B") == 0 ||
                 strcmp(argv[i], "--buttons") == 0) &&
                i + 1 < argc)
@@ -327,6 +335,10 @@ int main(int argc, char **argv) {
     /* Headless debug run: hold the given button mask, tick N times, dump. */
     for (long s = 0; s < debug_steps; s++) {
       vm.buttons = (uint8_t)buttons_mask;
+
+      if (trace)
+        trace_tick(&vm, s);
+
       fourb_vm_tick(&vm);
     }
 
