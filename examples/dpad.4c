@@ -1,0 +1,25 @@
+// dpad.4c - one blinking pixel per held direction button
+
+const LEFT = 1;
+const RIGHT = 2;
+const UP = 4;
+const DOWN = 8;
+
+u4 lx = 6;    // column of the left pixel
+u4 rx = 8;    // column of the right pixel
+u4 ux = 7;    // column of the up pixel
+u4 dx = 7;    // column of the down pixel
+u4 uy = 7;    // the up pixel sits one row above
+u4 row = 8;   // shared row
+u4 b;         // raw button bits
+
+fn main() {
+  for {
+    b = buttons();
+
+    if ((b & LEFT) != 0)  { flip(lx, row); }   // toggling every frame
+    if ((b & RIGHT) != 0) { flip(rx, row); }   // makes held buttons blink
+    if ((b & UP) != 0)    { flip(ux, uy); }    // arranged as an inverted T
+    if ((b & DOWN) != 0)  { flip(dx, row); }
+  }
+}

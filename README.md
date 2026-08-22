@@ -1,8 +1,9 @@
 # 4B
 
-A tiny fantasy box with a 16×16 1-bit screen, 16 nibble-wide registers,
+A tiny fantasy console with a 16×16 1-bit screen, 16 nibble-wide registers,
 one accumulator, and 256 twelve-bit instructions — assembled with `4a`,
 compiled from 4C source with `4c`, and run with `4b`.
+
 See `docs/4AL.md` for the assembly language, `docs/4AD.md` for the assembler
 design notes, `docs/4CL.md` for the 4C language, `docs/4CD.md` for the
 compiler design notes, and `docs/4BoD.md` for the original 4BoD
@@ -19,15 +20,15 @@ specification.
 - **`4a`** — the assembler, written in Zig (`src/4a.zig`,
   `src/assembler.zig`). It assembles `.4a` source into a 384-byte ROM image
   (`.4b`): 256 little-endian 12-bit words, padded with zeroes.
-- **`4c`** — the 4C compiler (`src/4c.zig`, `src/4c/`). It compiles
-  `.4c` source into the same 384-byte ROM image, or into equivalent `.4a`
-  assembly text with `--emit-asm`.
 - **`4b`** — the box, a C program (`src/4b.c`) using
   [raylib](https://www.raylib.com) for windowing and input. The VM
   (`src/vm.zig`), the assembler (`src/assembler.zig`) and the compiler
   (`src/4c/compiler.zig`) are compiled into static libraries that
   the box links against, so `.4a` source can be assembled and `.4c`
   source compiled at startup.
+- **`4c`** — the 4C compiler (`src/4c.zig`, `src/4c/`). It compiles
+  `.4c` source into the same 384-byte ROM image, or into equivalent `.4a`
+  assembly text with `-S`.
 
 ## Building
 
@@ -155,8 +156,7 @@ The window title shows the ROM name.
 | `examples/move.4a`     | steer a single pixel with the arrow keys      |
 
 `bounce` and `move` also exist as 4C source (`examples/bounce.4c`,
-`examples/move.4c`), plus `updown.4c` — flip a pixel while the up button is
-held — and `hello.4c`, `line.4c` and `fill.4c` as direct translations of
+`examples/move.4c`), plus `dpad.4c` — one blinking pixel per held direction button — and `hello.4c`, `line.4c` and `fill.4c` as direct translations of
 their `.4a` counterparts.
 
 Assemble and run one manually:

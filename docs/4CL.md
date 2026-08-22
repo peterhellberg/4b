@@ -361,26 +361,38 @@ fn main() {
 Compare `examples/move.4a`, which expresses the same program in raw
 assembly with hand-maintained flag slots and handler stubs.
 
-### 9.3 Raw button field
+### 9.3 Direction pad
 
 ```c
-// updown.4c - flip a pixel while the up button is held
+// dpad.4c - one blinking pixel per held direction button
+const LEFT = 1;
+const RIGHT = 2;
 const UP = 4;
-u4 px = 8;
-u4 py = 8;
+const DOWN = 8;
+
+u4 lx = 6;
+u4 rx = 8;
+u4 ux = 7;
+u4 dx = 7;
+u4 uy = 7;
+u4 row = 8;
 u4 b;
 
 fn main() {
+  for {
     b = buttons();
-    if ((b & UP) != 0) {
-        flip(px, py);
-    }
-    halt();
+
+    if ((b & LEFT) != 0)  { flip(lx, row); }
+    if ((b & RIGHT) != 0) { flip(rx, row); }
+    if ((b & UP) != 0)    { flip(ux, uy); }
+    if ((b & DOWN) != 0)  { flip(dx, row); }
+  }
 }
 ```
 
-Cost: 3 flag slots (`@entry`, the `if` join, and `halt`). Note that `UP`
-is a const, so `(b & UP)` satisfies the mask rule after folding.
+Cost: 5 flag slots (`@entry`, the `for` loop's top slot, and one join
+per `if`). Note that each mask is a const, so `(b & LEFT)` satisfies
+the mask rule after folding.
 
 ## 10. Limits and compile-time errors
 

@@ -135,7 +135,7 @@ pub fn build(b: *std.Build) void {
         addExample(b, examples_step, assembler, name, "4a");
     }
 
-    for ([_][]const u8{ "move", "bounce", "updown" }) |name| {
+    for ([_][]const u8{ "move", "bounce", "dpad" }) |name| {
         addExample(b, examples_step, compiler, name, "4c");
     }
 }
