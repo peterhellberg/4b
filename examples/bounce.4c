@@ -1,0 +1,17 @@
+// bounce.4c - a pixel moving diagonally, wrapping at edges
+u4 x  = 0;
+u4 y  = 8;
+u4 dx = 1;
+u4 dy = 1;
+
+fn main() {
+    while (true) {
+        flip(x, y);
+        x += dx;
+        y += dy;
+        if (x == 15) { dx = 15; }   // 15 is -1 mod 16
+        if (x == 0)  { dx = 1;  }
+        if (y == 15) { dy = 15; }
+        if (y == 0)  { dy = 1;  }
+    }
+}
