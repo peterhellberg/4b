@@ -3,7 +3,7 @@
 *Version 0.1. Companion to `docs/4CL.md`.*
 
 `4c` compiles a 4C source file (`.4c`) into a raw 384-byte program image
-(`.4b`) that a 4BoD machine can run — or, on request, into equivalent `.4a`
+(`.4b`) that the 4B box can run — or, on request, into equivalent `.4a`
 assembly text that `4a` reassembles byte-for-byte. Implementation language:
 **Zig 0.17.0-dev.387+31f157d80** (the pinned toolchain for this project).
 Binary name: **`4c`**.
@@ -16,7 +16,7 @@ Binary name: **`4c`**.
    as 4A (`docs/4AL.md` §8).
 3. Give clear diagnostics with file/line/column and a source snippet, in
    the same format as `4a`.
-4. Stay small and std-only; reuse existing repo pieces (`encoder.zig`,
+4. Stay small and std-only; reuse existing repo pieces (`isa.zig`,
    `Diag`) where they fit unchanged.
 5. Guarantee the round trip: `--emit-asm` output reassembled by `4a` must
    equal the direct image byte for byte (tested, §16).
@@ -67,9 +67,9 @@ fully succeeds. The `-o` prefix form (`-ofile`) works as in `4a`.
       ast.zig        AST node types
       sema.zig       decl tables, folding, register allocation, checks
       codegen.zig    flag-slot allocator + word emission
-      asmout.zig     words -> .4a text
-    encoder.zig      reused as-is: pack(words) -> [384]u8
-    diag.zig         reused as-is: Diag with line/col + caret snippets
+      emit_asm.zig   words -> .4a text
+    rom.zig        reused as-is: pack(words) -> [384]u8
+    dia.zig          reused as-is: Diag with line/col + caret snippets
   examples/*.4c      demo programs (added with the implementation)
   docs/              4BoD.md, 4AL.md, 4AD.md, 4CL.md, 4CD.md (this doc)
 ```
@@ -98,7 +98,7 @@ I/O isolated in `main.zig`.
 
 ```
 source → lex → parse → sema → codegen → pack → 384-byte image
-                                  └→ asmout → .4a text
+                                  └→ emit_asm → .4a text
 ```
 
 One forward walk over the AST; **no backpatching**. A `jmp` encodes a
@@ -115,7 +115,7 @@ pub fn compile(alloc: std.mem.Allocator, diag: *Diag, src: []const u8) CompileEr
     var analyzed = try sema.analyze(alloc, diag, prog);
     const words = try codegen.generate(alloc, diag, &analyzed);
     var image: Image = undefined;
-    encoder.pack(words.items, &image);
+    image.pack(words.items, &image);
     return image;
 }
 ```
@@ -201,7 +201,7 @@ State: `words: ArrayList(u16)`, `pos: u16`, `next_slot: u4`. Helpers:
 
 ```zig
 fn emit(op: Op, a: u4, b: u4) void {
-    words.append(model.encode(op, a, b));
+    words.append(isa.encode(op, a, b));
     pos += 1;
     if (pos > 256) diag.err(..., "program exceeds 256 instructions");
 }
@@ -318,7 +318,7 @@ byte identical to the direct image — the property tested in §16.
 
 ## 14. Error handling and diagnostics
 
-`diag.zig` is imported directly from the 4a side and used unchanged:
+`dia.zig` is imported directly from the 4a side and used unchanged:
 
 ```
 game.4c:12:9: error: unknown identifier 'velo'
@@ -349,9 +349,9 @@ All run by `zig build test`:
      rejections, initializer folding;
    - codegen: exact word sequences for every §12 catalog entry (golden
      fragments asserted inline);
-   - asmout: label placement, `@fN` rendering.
+   - emit_asm: label placement, `@fN` rendering.
 2. **Golden tests**: the three `docs/4CL.md` §9 examples compiled to
-   complete 384-byte images with expected bytes inline in `tests.zig`.
+   complete 384-byte images with expected bytes inline in `assembler.zig`.
 3. **Round-trip tests**: for each golden, feed the `--emit-asm` text back
    through the existing 4A pipeline (`compiler.zig`) and assert the second
    image equals the first byte-for-byte.
@@ -372,7 +372,7 @@ End-to-end sanity check (manual): `zig-out/bin/4c examples/move.4c` then
 - Toolchain pinned to `0.17.0-dev.387+31f157d80`; std churn notes from
   `docs/4AD.md` §16 apply verbatim (keep I/O in `main.zig`; isolate layout
   knowledge).
-- Reusing `encoder.zig`/`diag.zig` across both tools is deliberate: one
+- Reusing `rom.zig`/`dia.zig` across both tools is deliberate: one
   packing implementation, one diagnostic format, tested twice.
 - The scratch-discipline proof rests on the §4.2 language restrictions;
   if those ever loosen (e.g. general `|`/`^`), revisit §11 first.

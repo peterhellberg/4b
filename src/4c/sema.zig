@@ -1,6 +1,6 @@
 const std = @import("std");
 const ast = @import("ast.zig");
-const diagnostics = @import("../diagnostics.zig");
+const dia = @import("dia");
 
 pub const Error = error{ SemaError, OutOfMemory };
 
@@ -101,7 +101,7 @@ fn isReserved(name: []const u8) bool {
 
 pub const Semer = struct {
     alloc: std.mem.Allocator,
-    diag: *diagnostics.Diag,
+    diag: *dia.Diag,
     consts: std.StringHashMapUnmanaged(u4),
     scopes: std.ArrayList(Scope) = .empty,
     next_reg: u8 = 0,

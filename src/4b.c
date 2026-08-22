@@ -47,19 +47,19 @@ typedef struct {
   uint8_t buttons;
 } VM;
 
-extern void vm_init(VM *vm);
-extern void vm_tick(VM *vm);
-extern void vm_load_rom(VM *vm, const uint8_t *data, size_t len);
+extern void fourb_vm_init(VM *vm);
+extern void fourb_vm_tick(VM *vm);
+extern void fourb_vm_load_rom(VM *vm, const uint8_t *rom, size_t len);
 
-/* Embedded 4a assembler (src/asm.zig): assembles .4a source into a
+/* Embedded 4a assembler (src/assembler.zig): assembles .4a source into a
  * 384-byte image. Returns 0 on success, non-zero with diagnostics in err. */
-extern int bc_assemble(const char *path, const char *src, size_t src_len,
-                       uint8_t *out, char *err, size_t err_len);
+extern int fourb_assemble(const char *path, const char *src, size_t src_len,
+                          uint8_t *out, char *err, size_t err_len);
 
-/* Embedded 4c compiler (src/compile.zig): compiles .4c source into a
+/* Embedded 4c compiler (src/4c/compiler.zig): compiles .4c source into a
  * 384-byte image. Returns 0 on success, non-zero with diagnostics in err. */
-extern int bc_compile(const char *path, const char *src, size_t src_len,
-                      uint8_t *out, char *err, size_t err_len);
+extern int fourb_compile(const char *path, const char *src, size_t src_len,
+                         uint8_t *out, char *err, size_t err_len);
 
 static uint8_t *read_file(const char *path, size_t *out_len) {
   FILE *f = fopen(path, "rb");
@@ -237,10 +237,10 @@ int main(int argc, char **argv) {
 
     char errs[4096];
 
-    int rc = is_4c ? bc_compile(rom_path, src, src_len, assembled, errs,
-                                sizeof(errs))
-                   : bc_assemble(rom_path, src, src_len, assembled, errs,
-                                 sizeof(errs));
+    int rc = is_4c ? fourb_compile(rom_path, src, src_len, assembled, errs,
+                                   sizeof(errs))
+                   : fourb_assemble(rom_path, src, src_len, assembled, errs,
+                                    sizeof(errs));
 
     if (rc != 0) {
       fprintf(stderr, "%s", errs);
@@ -272,8 +272,8 @@ int main(int argc, char **argv) {
 
   VM vm;
 
-  vm_init(&vm);
-  vm_load_rom(&vm, rom, rom_len);
+  fourb_vm_init(&vm);
+  fourb_vm_load_rom(&vm, rom, rom_len);
 
   SetTraceLogLevel(LOG_ERROR);
 
@@ -314,7 +314,7 @@ int main(int argc, char **argv) {
     }
 
     if (IsKeyPressed(KEY_R))
-      vm_load_rom(&vm, rom, rom_len);
+      fourb_vm_load_rom(&vm, rom, rom_len);
 
     uint8_t btns = 0;
 
@@ -330,7 +330,7 @@ int main(int argc, char **argv) {
     vm.buttons = btns;
 
     for (int i = 0; i < speed; i++)
-      vm_tick(&vm);
+      fourb_vm_tick(&vm);
 
     int px = GetScreenHeight() / SCREEN_H;
     int ox = (GetScreenWidth() - SCREEN_W * px) / 2;

@@ -1,8 +1,8 @@
 const std = @import("std");
-const model = @import("model.zig");
-const diagnostics = @import("diagnostics.zig");
+const isa = @import("isa");
+const dia = @import("dia");
 
-const Item = model.Item;
+const Item = isa.Item;
 
 const reserved_mnemonics = [_][]const u8{
     "nop",  "lda",  "sta",  "read", "inc",  "cls",  "shl",  "shr",
@@ -51,7 +51,7 @@ pub fn isReserved(name: []const u8) bool {
 
 pub const AnalyzeError = error{ AnalyzeError, OutOfMemory };
 
-pub fn analyze(alloc: std.mem.Allocator, diag: *diagnostics.Diag, items: []const Item) AnalyzeError!Symbols {
+pub fn analyze(alloc: std.mem.Allocator, diag: *dia.Diag, items: []const Item) AnalyzeError!Symbols {
     var sym = Symbols.init(alloc);
     var pos: u16 = 0;
 
@@ -64,7 +64,7 @@ pub fn analyze(alloc: std.mem.Allocator, diag: *diagnostics.Diag, items: []const
             .inst => |inst| {
                 switch (inst.spec.op) {
                     .flag => {
-                        const flag_op: model.Operand = inst.a orelse model.Operand{ .flag_slot = 0 };
+                        const flag_op: isa.Operand = inst.a orelse isa.Operand{ .flag_slot = 0 };
                         switch (flag_op) {
                             .label_ref => |name| {
                                 _ = defineLabel(&sym, diag, name, inst.line, inst.col);
@@ -123,7 +123,7 @@ pub fn analyze(alloc: std.mem.Allocator, diag: *diagnostics.Diag, items: []const
     return sym;
 }
 
-fn defineLabel(sym: *Symbols, diag: *diagnostics.Diag, name: []const u8, line: u32, col: u32) ?u4 {
+fn defineLabel(sym: *Symbols, diag: *dia.Diag, name: []const u8, line: u32, col: u32) ?u4 {
     if (isReserved(name)) {
         diag.err(line, col, "reserved name '{s}' cannot be used as a label identifier", .{name});
         return null;
@@ -151,7 +151,7 @@ test "analyze labels and consts" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "");
+    var diag = dia.Diag.init(arena.allocator(), "<test>", "");
 
     const src = "@start:\njmp @start\n";
     const tokens = try @import("lexer.zig").lex(arena.allocator(), &diag, src);
@@ -167,7 +167,7 @@ test "reject reserved name as const" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "");
+    var diag = dia.Diag.init(arena.allocator(), "<test>", "");
 
     const src = "const lda = 5\n";
     const tokens = try @import("lexer.zig").lex(arena.allocator(), &diag, src);
@@ -182,7 +182,7 @@ test "reject flag slot 15" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "");
+    var diag = dia.Diag.init(arena.allocator(), "<test>", "");
 
     const src = "flag 15\n";
     const tokens = try @import("lexer.zig").lex(arena.allocator(), &diag, src);

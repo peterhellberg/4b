@@ -3,7 +3,7 @@
 *Version 0.2. Companion to `docs/4AL.md`.*
 
 `4a` assembles a `4A` source file (`.4a`) into a raw 384-byte program image
-(`.4b`) that a 4BoD machine can run. Implementation language: **Zig
+(`.4b`) that the 4B box can run. Implementation language: **Zig
 0.17.0-dev.387+31f157d80** (the pinned toolchain for this project). Binary
 name: **`4a`**.
 
@@ -43,8 +43,8 @@ Behavior: read the source, assemble, write the image. On error, print
 diagnostics to stderr and exit non-zero; **no output file is written** on
 failure — the image is written only after assembly succeeds.
 
-The assembler is also embedded in the `4b` console as a static library
-(see §17), so the console can assemble `.4a` sources at startup.
+The assembler is also embedded in the `4b` box as a static library
+(see §17), so the box can assemble `.4a` sources at startup.
 
 ## 5. Repository layout
 
@@ -58,18 +58,18 @@ The assembler is also embedded in the `4b` console as a static library
   src/
     main.zig          # CLI, driver, file I/O
     compiler.zig      # pipeline driver: lex -> parse -> pass 1 -> pass 2 -> pack
-    diag.zig          # diagnostics: errors with line/col and source snippets
+    dia.zig           # errors with line/col and source snippets
     lexer.zig         # tokens
     parser.zig        # tokens -> items
-    model.zig         # Op enum, Operand, Item, ISA signature table
+    isa.zig           # Op enum, Spec table, Item tree, word encoding
     symbols.zig       # label/const tables, flag-slot allocation (pass 1)
     codegen.zig       # word emission (pass 2)
-    encoder.zig       # 12-bit words -> 384-byte image
-    asm.zig           # C-ABI wrapper embedding the assembler in the console
-    vm.zig            # the 4BoD VM, shared with the console
-    4b.c              # raylib console (C)
-    tests.zig         # golden + negative tests
-    test/golden/      # *.4a golden sources; expected bytes live in tests.zig
+    rom.zig           # Rom image type + 12-bit words -> 384-byte packing
+    assembler.zig     # pipeline + C-ABI entry point for the box (§17)
+    vm.zig            # the 4B VM, shared with the box
+    4b.c              # raylib box (C)
+    (assembler tests live inline in assembler.zig)
+    test/golden/      # *.4a golden sources; expected bytes live in assembler.zig
 ```
 
 ## 6. Build (Zig 0.17.0-dev.387+31f157d80)
@@ -80,17 +80,18 @@ The toolchain is pinned to **`0.17.0-dev.387+31f157d80`**; recorded in
 
 | Step                    | What it does                                        |
 | ----------------------- | --------------------------------------------------- |
-| (default)               | build `4a`, the 4C compiler `4c`, and console `4b`  |
+| (default)               | build `4a`, the 4C compiler `4c`, and box `4b`  |
 | `zig build 4a -- …`     | assemble with `4a`                                  |
 | `zig build 4c -- …`     | compile with `4c`                                   |
-| `zig build 4b -- …`     | run in the `4b` console                             |
+| `zig build 4b -- …`     | run in the `4b` box                             |
 | `zig build run -- …`    | alias for `4b`                                      |
 | `zig build test`        | three suites: compiler module tests, VM tests, embedded-assembler tests |
 | `zig build examples`    | assemble every `examples/*.4a` to `examples/*.4b`   |
 
-The console links against two Zig static libraries built from this repo:
-`vm.zig` (the machine) and `asm.zig` (this assembler's C-ABI wrapper); raylib
-is fetched by the Zig package manager and built from source.
+The box links against two Zig static libraries built from this repo:
+`vm.zig` (the machine) and `assembler.zig` (this assembler, with its C-ABI
+entry point); raylib is fetched by the Zig package manager and built from
+source.
 
 > **Note.** `0.17.0-dev.387+31f157d80` sits mid-stream of the `std.Io`
 > rewrite and the `ArrayList` unmanaged/managed merge; std APIs can shift
@@ -116,7 +117,7 @@ pub fn compile(alloc: std.mem.Allocator, diag: *Diag, src: []const u8) CompileEr
     var sym      = try symbols.analyze(alloc, diag, items.items);   // pass 1
     const words  = try codegen.generate(alloc, diag, &sym, items.items); // pass 2
     var image: Image = undefined;
-    encoder.pack(words.items, &image);
+    image.pack(words.items, &image);
     return image;
 }
 ```
@@ -261,11 +262,11 @@ Zero-initialization is deliberate: unused program memory is `000` = `nop`, and
 programs shorter than 256 words are padded to a full 384-byte image. The
 packing is intentionally isolated in this one function so that, if a
 particular 4BoD reimplementation's ROM loader expects a different bit/byte
-order, only `encoder.zig` needs to change (see §16).
+order, only `rom.zig` needs to change (see §16).
 
 ## 13. Error handling and diagnostics
 
-`diag.zig` owns all user-facing output:
+`dia.zig` owns all user-facing output:
 
 ```
 file.4a:12:7: error: undefined label '@start'
@@ -283,7 +284,7 @@ file.4a:12:7: error: undefined label '@start'
 
 The CLI uses the process-provided arena (`args.arena`), so no explicit
 allocator teardown is needed in `main`. The embedded entry point
-(`asm.zig`) creates its own `std.heap.ArenaAllocator` over
+(`assembler.zig`) creates its own `std.heap.ArenaAllocator` over
 `std.heap.page_allocator` per call and deinitializes it before returning.
 The image is a fixed `[384]u8` passed by value; arena allocation makes the
 pipeline leak-free by construction.
@@ -297,19 +298,19 @@ Three layers, all run by `zig build test`:
    - parser: label definitions, operands, `const`;
    - symbols: slot allocation, reserved names, slot 15 rejection;
    - codegen: encoding of instructions and label resolution;
-   - encoder: packing of known words.
+   - image: packing of known words.
 2. **Golden tests**: the §10 example in `docs/4AL.md` is `test/golden/line.4a`
-   with expected bytes (inline in `tests.zig`) `80 03 21 00 03 22 30 02 B0 20
+   with expected bytes (inline in `assembler.zig`) `80 03 21 00 03 22 30 02 B0 20
    01 20 01 0A 50 20 02 F3 00 0C B1 10 0C` + 361 zero bytes. Other goldens:
    the §11 button program, a forward-reference `jmp`, a `flag N`/`jmp N`
    program, and an `org`/`dw` program.
 3. **Negative tests**: each §12 error condition must produce the expected
    diagnostic text (assert substrings like `undefined label`, `slot 15`).
 
-The VM (`vm.zig`) and the embedded-assembler wrapper (`asm.zig`) contribute
+The VM (`vm.zig`) and the embedded-assembler entry point (`assembler.zig`) contribute
 their own suites to the same `zig build test` step.
 
-An end-to-end sanity check (manual): run a golden ROM in the console and
+An end-to-end sanity check (manual): run a golden ROM in the box and
 confirm the middle row of pixels lights up.
 
 ## 16. Zig 0.17.0-dev.387+31f157d80 notes and risks
@@ -317,26 +318,27 @@ confirm the middle row of pixels lights up.
 - Toolchain is pinned to **`0.17.0-dev.387+31f157d80`** (recorded in
   `build.zig.zon`); std APIs are churning (`std.Io` writer/reader types,
   `std.ArrayList` unmanaged/managed merge, build API). Keep I/O in `main.zig`
-  and the ISA/bit layout in `model.zig`/`encoder.zig` so churn is localized.
+  and the ISA/bit layout in `isa.zig`/`rom.zig` so churn is localized.
 - **ROM byte-order**: the canonical packing (§12) is LSB-first and is
-  confirmed by the bundled VM (`vm_load_rom` unpacks the same layout) and by
+  confirmed by the bundled VM (`fourb_vm_load_rom` unpacks the same layout) and by
   golden tests; if another 4BoD reimplementation differs, flip it inside
-  `encoder.zig` only.
+  `rom.zig` only.
 - Two-pass position tracking must be identical in both passes; guard with
   `std.debug.assert` in pass 2.
 
-## 17. Embedding in the console
+## 17. Embedding in the box
 
-`asm.zig` wraps the pipeline behind one C-ABI entry point:
+`assembler.zig` exposes one C-ABI entry point, `fourb_assemble`, wrapping the
+pipeline:
 
 ```zig
-export fn bc_assemble(path: [*:0]const u8, src: [*]const u8, src_len: usize,
+export fn fourb_assemble(path: [*:0]const u8, src: [*]const u8, src_len: usize,
                      out: [*]u8, err_buf: ?[*]u8, err_cap: usize) c_int
 ```
 
 It returns 0 and fills `out` (384 bytes) on success; on failure it returns 1
 and writes `path:line:col: error: msg` lines into `err_buf`, NUL-terminated
-and truncated to fit. The console links this library and assembles any `.4a`
+and truncated to fit. The box links this library and assembles any `.4a`
 path at startup before opening the window; a unit test covers both paths.
 
 ## 18. Status
@@ -345,9 +347,10 @@ The v0.1 design has been implemented in full; notable deviations from the
 original plan:
 
 - Output is written directly after success instead of via temp-file + rename.
-- Golden expected bytes live inline in `tests.zig` rather than in separate
+- Golden expected bytes live inline in `assembler.zig` rather than in separate
   `.expected` files.
-- The assembler ships embedded in the console (`asm.zig`) in addition to the
+- The assembler ships embedded in the box (via `assembler.zig`) in addition
+to the
   standalone CLI.
 
 ## 19. Open questions

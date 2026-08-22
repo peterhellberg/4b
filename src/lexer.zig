@@ -1,5 +1,5 @@
 const std = @import("std");
-const diagnostics = @import("diagnostics.zig");
+const dia = @import("dia");
 
 pub const Kind = enum {
     ident,
@@ -43,7 +43,7 @@ fn hexVal(c: u8) u8 {
 
 pub const LexError = error{ LexError, OutOfMemory };
 
-pub fn lex(alloc: std.mem.Allocator, diag: *diagnostics.Diag, src: []const u8) LexError!std.ArrayList(Token) {
+pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!std.ArrayList(Token) {
     var tokens = std.ArrayList(Token).empty;
     var i: usize = 0;
     var line: u32 = 1;
@@ -254,7 +254,7 @@ fn expectTokens(src: []const u8, expected: []const Kind) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", src);
+    var diag = dia.Diag.init(arena.allocator(), "<test>", src);
 
     const tokens = try lex(arena.allocator(), &diag, src);
 

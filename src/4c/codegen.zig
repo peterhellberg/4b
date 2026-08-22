@@ -1,6 +1,6 @@
 const std = @import("std");
-const diagnostics = @import("../diagnostics.zig");
-const model = @import("../model.zig");
+const dia = @import("dia");
+const isa = @import("isa");
 const sema = @import("sema.zig");
 
 const Expr = sema.Expr;
@@ -47,7 +47,7 @@ const LoopCtx = struct {
 
 pub const Codegen = struct {
     alloc: std.mem.Allocator,
-    diag: *diagnostics.Diag,
+    diag: *dia.Diag,
 
     words: std.ArrayList(u16) = .empty,
     slots: std.ArrayList(SlotInfo) = .empty,
@@ -59,12 +59,12 @@ pub const Codegen = struct {
         return error.CodegenError;
     }
 
-    fn w(self: *Codegen, op: model.Op, a: u4, b: u4) Error!usize {
+    fn w(self: *Codegen, op: isa.Op, a: u4, b: u4) Error!usize {
         if (self.words.items.len >= 256) {
             return self.err(1, 1, "program exceeds 256 words", .{});
         }
 
-        try self.words.append(self.alloc, model.encode(op, a, b));
+        try self.words.append(self.alloc, isa.encode(op, a, b));
 
         return self.words.items.len - 1;
     }
@@ -96,7 +96,7 @@ pub const Codegen = struct {
     }
 
     fn patchJmp(self: *Codegen, idx: usize, slot: usize) void {
-        self.words.items[idx] = model.encode(.jmp, @intCast(slot), 0);
+        self.words.items[idx] = isa.encode(.jmp, @intCast(slot), 0);
     }
 
     // ---- expressions (result left in acc) ----
@@ -201,7 +201,7 @@ pub const Codegen = struct {
     }
 
     fn evalShift(self: *Codegen, left: bool, operand: *const Expr, dist: sema.ShiftDist, line: u32, col: u32) Error!void {
-        const op: model.Op = if (left) .shl else .shr;
+        const op: isa.Op = if (left) .shl else .shr;
 
         switch (dist) {
             .lit => |n| {
@@ -349,7 +349,7 @@ pub const Codegen = struct {
     fn cmpBranch(self: *Codegen, op: sema.CmpOp, lhs: *const Expr, rhs: *const Expr, patches: *std.ArrayList(usize), line: u32, col: u32) Error!void {
         if (lhs.* == .variable) {
             try self.evalExpr(rhs, line, col);
-            const mop: model.Op = switch (op) {
+            const mop: isa.Op = switch (op) {
                 .eq => .ifeq,
                 .lt => .iflt,
                 .gt => .ifgt,
@@ -357,7 +357,7 @@ pub const Codegen = struct {
             };
             _ = try self.w(mop, @intCast(lhs.variable), 0);
         } else if (rhs.* == .variable) {
-            const mirrored: model.Op = switch (op) {
+            const mirrored: isa.Op = switch (op) {
                 .eq => .ifeq,
                 .lt => .ifgt, // lhs < rhs == rhs > lhs
                 .gt => .iflt,
@@ -377,7 +377,7 @@ pub const Codegen = struct {
                     try self.evalExpr(lhs, line, col);
                     _ = try self.w(.sta, SCRATCH, 0);
                     try self.evalExpr(rhs, line, col);
-                    const mop: model.Op = if (op == .gt) model.Op.ifgt else model.Op.iflt;
+                    const mop: isa.Op = if (op == .gt) isa.Op.ifgt else isa.Op.iflt;
                     _ = try self.w(mop, SCRATCH, 0);
                 },
                 else => unreachable,
@@ -556,7 +556,7 @@ pub const Codegen = struct {
     /// same skeleton as mutateLoop but each pass shifts once.
     fn shiftMutateLoop(self: *Codegen, target: u4, dist_reg: u8, left: bool, line: u32, col: u32) Error!void {
         const areg: u4 = @intCast(dist_reg);
-        const op: model.Op = if (left) .shl else .shr;
+        const op: isa.Op = if (left) .shl else .shr;
 
         _ = try self.w(.lda_imm, 0, 0);
         _ = try self.w(.ifgt, areg, 0);
@@ -721,7 +721,7 @@ pub const Codegen = struct {
 
 pub fn generate(
     alloc: std.mem.Allocator,
-    diag: *diagnostics.Diag,
+    diag: *dia.Diag,
     prog: sema.Prog,
 ) Error!Result {
     var cg = Codegen{ .alloc = alloc, .diag = diag };

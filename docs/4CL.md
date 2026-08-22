@@ -2,7 +2,7 @@
 
 *Version 0.1 (draft). Companion to `docs/4BoD.md` and `docs/4AL.md`.*
 
-4C is a small, C-flavored programming language for the 4BoD fantasy console.
+4C is a small, C-flavored programming language for the 4B box.
 A `.4c` source file is compiled by the 4C compiler (`4c`) into the same
 384-byte program images that the 4A assembler (`4a`) produces — or, on
 request, into readable `.4a` assembly text. 4C has no runtime: every
@@ -10,7 +10,7 @@ high-level construct compiles away. Variables become registers, control flow
 becomes flag slots and jumps, and arithmetic becomes runs of `inc` and
 `shl`/`shr` (plus, where two runtime values meet, small generated loops).
 
-## 1. The 4BoD machine, in one paragraph
+## 1. The 4B machine, in one paragraph
 
 - Program memory: 256 instructions, each instruction exactly **12 bits**.
 - RAM: 16 registers `r0`–`r15`, each holding one **4-bit** value (a nibble).

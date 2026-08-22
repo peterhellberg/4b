@@ -2,14 +2,14 @@
 
 *Version 0.1 (draft). Companion to `docs/4BoD.md`.*
 
-4A is a small, assembly-style programming language for the 4BoD fantasy
-console. A `.4a` source file is a sequence of instructions that map 1:1 onto
-the 4BoD instruction set, plus a few conveniences (named constants, named
-labels) that the 4A assembler (`4a`) resolves away at build time. Every 4BoD
+4A is a small, assembly-style programming language for the 4B box.
+A `.4a` source file is a sequence of instructions that map 1:1 onto
+the 4B instruction set, plus a few conveniences (named constants, named
+labels) that the 4A assembler (`4a`) resolves away at build time. Every 4B
 machine instruction is expressible in 4A, and every 4A source file assembles to
 exactly one 384-byte program image.
 
-## 1. The 4BoD machine, in one paragraph
+## 1. The 4B machine, in one paragraph
 
 - Program memory: 256 instructions, each instruction exactly **12 bits**.
 - RAM: 16 registers `r0`–`r15`, each holding one **4-bit** value (a nibble).
@@ -158,9 +158,9 @@ produces bytes `80 03 21` then 0x00 padding to byte 383.
 
 ## 9. Full ISA coverage
 
-Every 4BoD opcode has a 4A form, so no instruction is unreachable:
+Every 4B opcode has a 4A form, so no instruction is unreachable:
 
-| 4BoD opcode | 4A form            |
+| 4B opcode   | 4A form            |
 |:-----------:|--------------------|
 | `0000`      | `nop`              |
 | `0001`      | `lda rN`           |
@@ -199,7 +199,7 @@ iflt r3         ; loop while new x > 0; exit when it wraps to 0
 jmp @draw
 
 @halt:
-jmp @halt       ; freeze (classic 4BoD halt idiom)
+jmp @halt       ; freeze (the classic 4BoD halt idiom)
 ```
 
 The assembler assigns `@draw` → slot 0 and `@halt` → slot 1. The 15 emitted
@@ -211,7 +211,7 @@ words are `0x380 0x210 0x300 0x220 0x230 0xB00 0x120 0x200 0xA01 0x500 0x220
 ```
 
 …followed by 0x00 padding to byte 383. (Verify this with `4a`, then run it
-under a 4BoD emulator: it should light the middle row of pixels.)
+under the 4b box: it should light the middle row of pixels.)
 
 ## 11. Example: button input
 

@@ -4,110 +4,68 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    // ---- 4a assembler (pure Zig) -------------------------------------------
+    // ---- modules ------------------------------------------------------------
+    //
+    // Shared leaf modules. The 4a/4c implementations reach these through
+    // named imports (not file paths) so that the same implementation file can
+    // serve as the root of both a CLI executable and an embeddable static
+    // library without any file belonging to two module graphs.
+    const dia_mod = zigModule(b, "src/dia.zig", target, optimize);
+    const isa_mod = zigModule(b, "src/isa.zig", target, optimize);
+    const rom_mod = zigModule(b, "src/rom.zig", target, optimize);
+
+    const shared_imports = [_]std.Build.Module.Import{
+        .{ .name = "dia", .module = dia_mod },
+        .{ .name = "isa", .module = isa_mod },
+        .{ .name = "rom", .module = rom_mod },
+    };
+
+    const asm_mod = b.createModule(.{
+        .root_source_file = b.path("src/assembler.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &shared_imports,
+    });
+
+    const com_mod = b.createModule(.{
+        .root_source_file = b.path("src/4c/compiler.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &shared_imports,
+    });
+
+    // ---- 4a assembler -----------------------------------------------------------
     const assembler = b.addExecutable(.{
         .name = "4a",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/4a.zig"),
             .target = target,
             .optimize = optimize,
+            .imports = &.{
+                .{ .name = "assembler", .module = asm_mod },
+                .{ .name = "dia", .module = dia_mod },
+            },
         }),
     });
     b.installArtifact(assembler);
 
-    const run_cmd = b.addRunArtifact(assembler);
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run_cmd.addArgs(args);
-    const asm_step = b.step("4a", "Assemble with 4a");
-    asm_step.dependOn(&run_cmd.step);
-    b.step("assemble", "Alias for 4a").dependOn(asm_step);
-
-    const unit_tests = b.addTest(.{ .root_module = assembler.root_module });
-    const run_tests = b.addRunArtifact(unit_tests);
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_tests.step);
-
-    const vm_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/vm.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    const run_vm_tests = b.addRunArtifact(vm_tests);
-    test_step.dependOn(&run_vm_tests.step);
-
-    const asm_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/asm.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    const run_asm_tests = b.addRunArtifact(asm_tests);
-    test_step.dependOn(&run_asm_tests.step);
-
-    const compile_tests = b.addTest(.{
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/compile.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    const run_compile_tests = b.addRunArtifact(compile_tests);
-    test_step.dependOn(&run_compile_tests.step);
-
-    // ---- 4c compiler (pure Zig) ---------------------------------------------
-    const compiler = b.addExecutable(.{
-        .name = "4c",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/4c.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-    b.installArtifact(compiler);
-
-    const run_c_cmd = b.addRunArtifact(compiler);
-    run_c_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run_c_cmd.addArgs(args);
-    const compile_step = b.step("4c", "Compile with 4c");
-    compile_step.dependOn(&run_c_cmd.step);
-    b.step("compile", "Alias for 4c").dependOn(compile_step);
-
-    const compiler_tests = b.addTest(.{ .root_module = compiler.root_module });
-    const run_compiler_tests = b.addRunArtifact(compiler_tests);
-    test_step.dependOn(&run_compiler_tests.step);
-
-    const compile_lib = b.addLibrary(.{
-        .name = "compile",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/compile.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
-    });
-
-    // ---- 4b console (Zig VM + C raylib) ------------------------------------
+    // ---- 4b box (C + Zig VM/assembler/compiler + C raylib) ------------------
     const vm_lib = b.addLibrary(.{
         .name = "vm",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/vm.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = zigModule(b, "src/vm.zig", target, optimize),
     });
 
     const asm_lib = b.addLibrary(.{
         .name = "asm",
-        .root_module = b.createModule(.{
-            .root_source_file = b.path("src/asm.zig"),
-            .target = target,
-            .optimize = optimize,
-        }),
+        .root_module = asm_mod,
     });
 
-    const console = b.addExecutable(.{
+    const com_lib = b.addLibrary(.{
+        .name = "compile",
+        .root_module = com_mod,
+    });
+
+    const box = b.addExecutable(.{
         .name = "4b",
         .root_module = b.createModule(.{
             .target = target,
@@ -116,57 +74,124 @@ pub fn build(b: *std.Build) void {
         }),
     });
 
-    console.root_module.addCSourceFile(.{
+    box.root_module.addCSourceFile(.{
         .file = b.path("src/4b.c"),
         .flags = &.{"-std=c23"},
     });
 
-    if (!addRaylib(console.root_module, b.lazyDependency("raylib", .{
+    if (!addRaylib(box.root_module, b.lazyDependency("raylib", .{
         .target = target,
         .optimize = optimize,
     }) orelse return)) return;
 
-    console.root_module.linkLibrary(vm_lib);
-    console.root_module.linkLibrary(asm_lib);
-    console.root_module.linkLibrary(compile_lib);
-    b.installArtifact(console);
+    box.root_module.linkLibrary(vm_lib);
+    box.root_module.linkLibrary(asm_lib);
+    box.root_module.linkLibrary(com_lib);
+    b.installArtifact(box);
 
-    const run_console = b.addRunArtifact(console);
-    run_console.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run_console.addArgs(args);
-    const console_step = b.step("4b", "Run ROM in the console");
-    console_step.dependOn(&run_console.step);
-    b.step("run", "Alias for 4b").dependOn(console_step);
+    // ---- 4c compiler ------------------------------------------------------------
+    const compiler = b.addExecutable(.{
+        .name = "4c",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/4c.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "compiler", .module = com_mod },
+                .{ .name = "dia", .module = dia_mod },
+                .{ .name = "rom", .module = rom_mod },
+            },
+        }),
+    });
+    b.installArtifact(compiler);
 
-    // ---- build example ROMs ---------------------------------------------------
-    const examples_step = b.step("examples", "Assemble/compile example .4b files");
-    const asm_examples = [_][]const u8{
-        "hello",
-        "line",
-        "fill",
+    // ---- run steps ----------------------------------------------------------
+    addRunStep(b, assembler, "4a", "Assemble with 4a", "assemble");
+    addRunStep(b, compiler, "4c", "Compile with 4c", "compile");
+    addRunStep(b, box, "4b", "Run ROM in the box", "run");
+
+    // ---- tests ----------------------------------------------------------------
+    const test_step = b.step("test", "Run unit tests");
+
+    const suites = [_]*std.Build.Module{
+        assembler.root_module, // CLI + golden/negative assembler tests
+        asm_mod, // assembler pipeline tests
+        rom_mod, // bit-packing tests
+        compiler.root_module, // CLI tests
+        com_mod, // compiler pipeline tests
+        vm_lib.root_module, // VM opcode tests
     };
-    for (asm_examples) |name| {
-        const src = std.fmt.allocPrint(b.allocator, "examples/{s}.4a", .{name}) catch continue;
-        const dst = std.fmt.allocPrint(b.allocator, "examples/{s}.4b", .{name}) catch continue;
-        const assemble = b.addRunArtifact(assembler);
-        assemble.addFileArg(b.path(src));
-        assemble.addArgs(&.{ "-o", dst });
-        examples_step.dependOn(&assemble.step);
+
+    for (suites) |suite| {
+        const suite_tests = b.addTest(.{ .root_module = suite });
+        const run_suite_tests = b.addRunArtifact(suite_tests);
+        test_step.dependOn(&run_suite_tests.step);
     }
 
-    const c_examples = [_][]const u8{
-        "move",
-        "bounce",
-        "updown",
-    };
-    for (c_examples) |name| {
-        const src = std.fmt.allocPrint(b.allocator, "examples/{s}.4c", .{name}) catch continue;
-        const dst = std.fmt.allocPrint(b.allocator, "examples/{s}.4b", .{name}) catch continue;
-        const compile = b.addRunArtifact(compiler);
-        compile.addFileArg(b.path(src));
-        compile.addArgs(&.{ "-o", dst });
-        examples_step.dependOn(&compile.step);
+    // ---- examples ---------------------------------------------------------------
+    const examples_step = b.step("examples", "Assemble/compile example ROMs");
+
+    for ([_][]const u8{ "hello", "line", "fill" }) |name| {
+        addExample(b, examples_step, assembler, name, "4a");
     }
+
+    for ([_][]const u8{ "move", "bounce", "updown" }) |name| {
+        addExample(b, examples_step, compiler, name, "4c");
+    }
+}
+
+/// Create a plain Zig module for the given source file.
+fn zigModule(
+    b: *std.Build,
+    root_source_file: []const u8,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) *std.Build.Module {
+    return b.createModule(.{
+        .root_source_file = b.path(root_source_file),
+        .target = target,
+        .optimize = optimize,
+    });
+}
+
+/// Add a step that runs an installed executable with the command line args
+/// given on the zig build invocation, plus an optional alias step.
+fn addRunStep(
+    b: *std.Build,
+    exe: *std.Build.Step.Compile,
+    name: []const u8,
+    description: []const u8,
+    alias: ?[]const u8,
+) void {
+    const run = b.addRunArtifact(exe);
+    run.step.dependOn(b.getInstallStep());
+    if (b.args) |args| run.addArgs(args);
+
+    const step = b.step(name, description);
+    step.dependOn(&run.step);
+
+    if (alias) |a| {
+        const alias_description = std.fmt.allocPrint(b.allocator, "Alias for {s}", .{name}) catch return;
+        b.step(a, alias_description).dependOn(step);
+    }
+}
+
+/// Add a step dependency that turns examples/<name>.<ext> into
+/// examples/<name>.4b using the given tool.
+fn addExample(
+    b: *std.Build,
+    step: *std.Build.Step,
+    tool: *std.Build.Step.Compile,
+    name: []const u8,
+    ext: []const u8,
+) void {
+    const src = std.fmt.allocPrint(b.allocator, "examples/{s}.{s}", .{ name, ext }) catch return;
+    const dst = std.fmt.allocPrint(b.allocator, "examples/{s}.4b", .{name}) catch return;
+
+    const run = b.addRunArtifact(tool);
+    run.addFileArg(b.path(src));
+    run.addArgs(&.{ "-o", dst });
+    step.dependOn(&run.step);
 }
 
 /// Compile raylib (desktop GLFW backend) directly into the given module and

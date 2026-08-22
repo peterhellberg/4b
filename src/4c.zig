@@ -1,11 +1,7 @@
 const std = @import("std");
-const compiler = @import("4c/compiler.zig");
-const asmout = @import("4c/asmout.zig");
-const diagnostics = @import("diagnostics.zig");
-
-comptime {
-    _ = @import("tests.zig");
-}
+const compiler = @import("compiler");
+const emit_asm = compiler.emit_asm;
+const dia = @import("dia");
 
 const Options = struct {
     input: ?[]const u8,
@@ -68,7 +64,7 @@ pub fn main(args: std.process.Init) u8 {
         return 1;
     };
 
-    var diag = diagnostics.Diag.init(alloc, input_path, src);
+    var diag = dia.Diag.init(alloc, input_path, src);
 
     const out = compiler.compileWords(alloc, &diag, src) catch |e| switch (e) {
         error.CompileFailed => {
@@ -89,7 +85,7 @@ pub fn main(args: std.process.Init) u8 {
     if (opts.emit_asm) |path| {
         var text = std.ArrayList(u8).empty;
 
-        asmout.write(alloc, out.words, &text) catch {
+        emit_asm.write(alloc, out.words, &text) catch {
             std.debug.print("error: out of memory\n", .{});
             return 1;
         };
@@ -102,7 +98,7 @@ pub fn main(args: std.process.Init) u8 {
 
     var image: [384]u8 = undefined;
 
-    @import("encoder.zig").pack(out.words, &image);
+    @import("rom").pack(out.words, &image);
 
     const output_path = opts.output orelse defaultOutput(alloc, input_path);
 

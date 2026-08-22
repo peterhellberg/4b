@@ -1,6 +1,6 @@
 # 4B
 
-A tiny fantasy console with a 16×16 1-bit screen, 16 nibble-wide registers,
+A tiny fantasy box with a 16×16 1-bit screen, 16 nibble-wide registers,
 one accumulator, and 256 twelve-bit instructions — assembled with `4a`,
 compiled from 4C source with `4c`, and run with `4b`.
 See `docs/4AL.md` for the assembly language, `docs/4AD.md` for the assembler
@@ -22,11 +22,11 @@ specification.
 - **`4c`** — the 4C compiler (`src/4c.zig`, `src/4c/`). It compiles
   `.4c` source into the same 384-byte ROM image, or into equivalent `.4a`
   assembly text with `--emit-asm`.
-- **`4b`** — the console, a C program (`src/4b.c`) using
+- **`4b`** — the box, a C program (`src/4b.c`) using
   [raylib](https://www.raylib.com) for windowing and input. The VM
-  (`src/vm.zig`), the assembler (`src/asm.zig`) and the compiler
-  (`src/compile.zig`, C-ABI shims) are compiled into static libraries that
-  the console links against, so `.4a` source can be assembled and `.4c`
+  (`src/vm.zig`), the assembler (`src/assembler.zig`) and the compiler
+  (`src/4c/compiler.zig`) are compiled into static libraries that
+  the box links against, so `.4a` source can be assembled and `.4c`
   source compiled at startup.
 
 ## Building
@@ -79,7 +79,7 @@ zig build test           # run assembler, compiler and VM unit tests
 zig build examples       # assemble/compile all example programs to examples/*.4b
 zig build 4a -- <args>        # assemble with 4a
 zig build 4c -- <args>        # compile with 4c
-zig build 4b -- <args>        # run in the console
+zig build 4b -- <args>        # run in the box
 zig build assemble -- <args>  # alias for 4a
 zig build compile -- <args>   # alias for 4c
 zig build run -- <args>       # alias for 4b
@@ -165,7 +165,7 @@ zig-out/bin/4a examples/bounce.4a
 zig-out/bin/4b examples/bounce.4b
 ```
 
-or run the source directly — the console assembles it on startup:
+or run the source directly — the box assembles it on startup:
 
 ```
 zig-out/bin/4b examples/bounce.4a
@@ -179,21 +179,22 @@ zig build examples && zig build run -- examples/bounce.4b
 
 ## How the pieces fit together
 
-The console executable is C (`src/4b.c`, raylib for windowing and
+The box executable is C (`src/4b.c`, raylib for windowing and
 input), but everything that matters lives in Zig, linked in as static
 libraries:
 
-- **One VM, two frontends** — `src/vm.zig` is compiled both into the console
+- **One VM, two frontends** — `src/vm.zig` is compiled both into the box
   and into the native test suite, which exercises every opcode against the
   specification in `docs/4BoD.md` and `docs/4AL.md`.
 - **A pinned ABI** — the VM state is an `extern struct` whose layout mirrors
   the `VM` struct in `4b.c` byte for byte — program at offset 0,
   registers at 512, screen at 529, flag table at 786 — exposed through
-  `vm_init`, `vm_tick` and `vm_load_rom`. A unit test pins these offsets so
+  `fourb_vm_init`, `fourb_vm_tick` and
+  `fourb_vm_load_rom`. A unit test pins these offsets so
   the two sides cannot drift apart.
-- **An embedded assembler** — `src/asm.zig` wraps the assembler behind a
-  single C-ABI entry point (`bc_assemble`) that returns the 384-byte image
-  and diagnostics, letting the console assemble `.4a` sources at startup.
-- **An embedded compiler** — `src/compile.zig` does the same for the 4C
-  compiler (`bc_compile`), letting the console compile `.4c` sources at
+- **An embedded assembler** — `src/assembler.zig` exposes a single C-ABI
+  entry point (`fourb_assemble`) that returns the 384-byte image
+  and diagnostics, letting the box assemble `.4a` sources at startup.
+- **An embedded compiler** — `src/4c/compiler.zig` does the same for the 4C
+  compiler (`fourb_compile`), letting the box compile `.4c` sources at
   startup.

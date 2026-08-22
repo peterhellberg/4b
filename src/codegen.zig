@@ -1,15 +1,15 @@
 const std = @import("std");
-const diagnostics = @import("diagnostics.zig");
-const encoder = @import("encoder.zig");
-const model = @import("model.zig");
+const dia = @import("dia");
+const rom = @import("rom");
+const isa = @import("isa");
 const symbols = @import("symbols.zig");
 
-const Item = model.Item;
-const Operand = model.Operand;
+const Item = isa.Item;
+const Operand = isa.Operand;
 
 pub const CodegenError = error{ CodegenError, OutOfMemory };
 
-pub fn generate(alloc: std.mem.Allocator, diag: *diagnostics.Diag, sym: *const symbols.Symbols, items: []const Item) CodegenError!std.ArrayList(u16) {
+pub fn generate(alloc: std.mem.Allocator, diag: *dia.Diag, sym: *const symbols.Symbols, items: []const Item) CodegenError!std.ArrayList(u16) {
     var words = std.ArrayList(u16).empty;
     var pos: u16 = 0;
 
@@ -17,7 +17,7 @@ pub fn generate(alloc: std.mem.Allocator, diag: *diagnostics.Diag, sym: *const s
         switch (item) {
             .label => |l| {
                 if (sym.labels.get(l.name)) |slot| {
-                    try words.append(alloc, model.encode(.flag, slot, 0));
+                    try words.append(alloc, isa.encode(.flag, slot, 0));
                 }
                 pos += 1;
             },
@@ -30,7 +30,7 @@ pub fn generate(alloc: std.mem.Allocator, diag: *diagnostics.Diag, sym: *const s
                         op = .lda_imm;
                     }
                 }
-                try words.append(alloc, model.encode(op, a_val, b_val));
+                try words.append(alloc, isa.encode(op, a_val, b_val));
                 pos += 1;
             },
             .const_def => {},
@@ -44,13 +44,13 @@ pub fn generate(alloc: std.mem.Allocator, diag: *diagnostics.Diag, sym: *const s
                 pos += 1;
             },
         }
-        std.debug.assert(pos <= encoder.IMAGE_WORDS);
+        std.debug.assert(pos <= rom.IMAGE_WORDS);
     }
 
     return words;
 }
 
-fn resolveOperand(sym: *const symbols.Symbols, kind: model.OperandKind, op: ?Operand, diag: *diagnostics.Diag, line: u32, col: u32) u4 {
+fn resolveOperand(sym: *const symbols.Symbols, kind: isa.OperandKind, op: ?Operand, diag: *dia.Diag, line: u32, col: u32) u4 {
     if (op == null) return 0;
     const operand = op.?;
     switch (kind) {
@@ -80,7 +80,7 @@ fn resolveOperand(sym: *const symbols.Symbols, kind: model.OperandKind, op: ?Ope
 test "encode nop" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "");
+    var diag = dia.Diag.init(arena.allocator(), "<test>", "");
     const sym = symbols.Symbols.init(arena.allocator());
     const src = "nop\n";
     const tokens = try @import("lexer.zig").lex(arena.allocator(), &diag, src);
@@ -93,7 +93,7 @@ test "encode nop" {
 test "encode lda #8" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "");
+    var diag = dia.Diag.init(arena.allocator(), "<test>", "");
     const sym = symbols.Symbols.init(arena.allocator());
     const src = "lda #8\n";
     const tokens = try @import("lexer.zig").lex(arena.allocator(), &diag, src);
@@ -106,7 +106,7 @@ test "encode lda #8" {
 test "encode label and jmp" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "");
+    var diag = dia.Diag.init(arena.allocator(), "<test>", "");
     const src = "@start:\njmp @start\n";
     const tokens = try @import("lexer.zig").lex(arena.allocator(), &diag, src);
     const items = try @import("parser.zig").parse(arena.allocator(), &diag, tokens.items);
@@ -120,7 +120,7 @@ test "encode label and jmp" {
 test "undefined label error" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
-    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "");
+    var diag = dia.Diag.init(arena.allocator(), "<test>", "");
     const src = "jmp @nope\n";
     const tokens = try @import("lexer.zig").lex(arena.allocator(), &diag, src);
     const items = try @import("parser.zig").parse(arena.allocator(), &diag, tokens.items);

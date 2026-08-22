@@ -1,10 +1,6 @@
 const std = @import("std");
-const assembler = @import("assembler.zig");
-const diagnostics = @import("diagnostics.zig");
-
-comptime {
-    _ = @import("tests.zig");
-}
+const assembler = @import("assembler");
+const dia = @import("dia");
 
 const Options = struct {
     input: ?[]const u8,
@@ -56,7 +52,7 @@ pub fn main(args: std.process.Init) u8 {
         return 1;
     };
 
-    var diag = diagnostics.Diag.init(alloc, input_path, src);
+    var diag = dia.Diag.init(alloc, input_path, src);
 
     const image = assembler.assemble(alloc, &diag, src) catch |e| switch (e) {
         error.AssembleFailed => {

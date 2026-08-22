@@ -1,10 +1,10 @@
 const std = @import("std");
-const diagnostics = @import("diagnostics.zig");
+const dia = @import("dia");
 const lexer = @import("lexer.zig");
-const model = @import("model.zig");
+const isa = @import("isa");
 
-const Operand = model.Operand;
-const Item = model.Item;
+const Operand = isa.Operand;
+const Item = isa.Item;
 const Token = lexer.Token;
 const Kind = lexer.Kind;
 
@@ -13,7 +13,7 @@ pub const ParseError = error{
     OutOfMemory,
 };
 
-pub fn parse(alloc: std.mem.Allocator, diag: *diagnostics.Diag, tokens: []const Token) ParseError!std.ArrayList(Item) {
+pub fn parse(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Token) ParseError!std.ArrayList(Item) {
     var items = std.ArrayList(Item).empty;
     var idx: usize = 0;
 
@@ -38,7 +38,7 @@ fn peek(tokens: []const Token, idx: usize) Token {
     return tokens[tokens.len - 1];
 }
 
-fn parseLine(alloc: std.mem.Allocator, diag: *diagnostics.Diag, tokens: []const Token, idx: *usize, items: *std.ArrayList(Item)) ParseError!void {
+fn parseLine(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Token, idx: *usize, items: *std.ArrayList(Item)) ParseError!void {
     while (true) {
         const t = peek(tokens, idx.*);
         if (t.kind == .eol or t.kind == .eof) break;
@@ -64,7 +64,7 @@ fn parseLine(alloc: std.mem.Allocator, diag: *diagnostics.Diag, tokens: []const 
     if (peek(tokens, idx.*).kind == .eol) idx.* += 1;
 }
 
-fn parseStatement(alloc: std.mem.Allocator, diag: *diagnostics.Diag, tokens: []const Token, idx: *usize, items: *std.ArrayList(Item)) ParseError!void {
+fn parseStatement(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Token, idx: *usize, items: *std.ArrayList(Item)) ParseError!void {
     const tok = tokens[idx.*];
     const name = toLower(alloc, tok.text);
 
@@ -113,7 +113,7 @@ fn parseStatement(alloc: std.mem.Allocator, diag: *diagnostics.Diag, tokens: []c
         return;
     }
 
-    const spec = model.lookupSpec(tok.text) orelse {
+    const spec = isa.lookupSpec(tok.text) orelse {
         diag.err(tok.line, tok.col, "unknown mnemonic or directive '{s}'", .{tok.text});
         skipToEol(tokens, idx);
 
@@ -155,7 +155,7 @@ fn parseStatement(alloc: std.mem.Allocator, diag: *diagnostics.Diag, tokens: []c
     } });
 }
 
-fn parseOperand(tokens: []const Token, idx: *usize, kind: model.OperandKind, diag: *diagnostics.Diag) ?Operand {
+fn parseOperand(tokens: []const Token, idx: *usize, kind: isa.OperandKind, diag: *dia.Diag) ?Operand {
     const tok = peek(tokens, idx.*);
 
     switch (kind) {
@@ -263,7 +263,7 @@ fn parseOperand(tokens: []const Token, idx: *usize, kind: model.OperandKind, dia
     }
 }
 
-fn expectToken(tokens: []const Token, idx: *usize, comptime expected: Kind, diag: *diagnostics.Diag, comptime msg: []const u8) ?Token {
+fn expectToken(tokens: []const Token, idx: *usize, comptime expected: Kind, diag: *dia.Diag, comptime msg: []const u8) ?Token {
     const tok = peek(tokens, idx.*);
 
     if (tok.kind == expected) {
@@ -324,7 +324,7 @@ test "parse lda #8 sta r1" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "lda #8\nsta r1\n");
+    var diag = dia.Diag.init(arena.allocator(), "<test>", "lda #8\nsta r1\n");
 
     const tokens = try lexer.lex(arena.allocator(), &diag, "lda #8\nsta r1\n");
     const items = try parse(arena.allocator(), &diag, tokens.items);
@@ -334,12 +334,12 @@ test "parse lda #8 sta r1" {
 
     const inst0 = items.items[0].inst;
 
-    try std.testing.expectEqual(model.Op.lda_mem, inst0.spec.op);
+    try std.testing.expectEqual(isa.Op.lda_mem, inst0.spec.op);
     try std.testing.expectEqual(@as(u4, 8), inst0.a.?.imm);
 
     const inst1 = items.items[1].inst;
 
-    try std.testing.expectEqual(model.Op.sta, inst1.spec.op);
+    try std.testing.expectEqual(isa.Op.sta, inst1.spec.op);
     try std.testing.expectEqual(@as(u4, 1), inst1.a.?.reg);
 }
 
@@ -347,7 +347,7 @@ test "parse label definition" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "@foo:\n");
+    var diag = dia.Diag.init(arena.allocator(), "<test>", "@foo:\n");
 
     const tokens = try lexer.lex(arena.allocator(), &diag, "@foo:\n");
     const items = try parse(arena.allocator(), &diag, tokens.items);
@@ -361,7 +361,7 @@ test "parse jmp @label" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "jmp @start\n");
+    var diag = dia.Diag.init(arena.allocator(), "<test>", "jmp @start\n");
 
     const tokens = try lexer.lex(arena.allocator(), &diag, "jmp @start\n");
     const items = try parse(arena.allocator(), &diag, tokens.items);
@@ -370,7 +370,7 @@ test "parse jmp @label" {
 
     const inst = items.items[0].inst;
 
-    try std.testing.expectEqual(model.Op.jmp, inst.spec.op);
+    try std.testing.expectEqual(isa.Op.jmp, inst.spec.op);
     try std.testing.expectEqualStrings("start", inst.a.?.label_ref);
 }
 
@@ -378,7 +378,7 @@ test "parse const" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "const X = 5\n");
+    var diag = dia.Diag.init(arena.allocator(), "<test>", "const X = 5\n");
 
     const tokens = try lexer.lex(arena.allocator(), &diag, "const X = 5\n");
     const items = try parse(arena.allocator(), &diag, tokens.items);
@@ -392,7 +392,7 @@ test "parse peek r0, r1" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 
-    var diag = diagnostics.Diag.init(arena.allocator(), "<test>", "peek r0, r1\n");
+    var diag = dia.Diag.init(arena.allocator(), "<test>", "peek r0, r1\n");
 
     const tokens = try lexer.lex(arena.allocator(), &diag, "peek r0, r1\n");
     const items = try parse(arena.allocator(), &diag, tokens.items);
@@ -401,7 +401,7 @@ test "parse peek r0, r1" {
 
     const inst = items.items[0].inst;
 
-    try std.testing.expectEqual(model.Op.peek, inst.spec.op);
+    try std.testing.expectEqual(isa.Op.peek, inst.spec.op);
     try std.testing.expectEqual(@as(u4, 0), inst.a.?.reg);
     try std.testing.expectEqual(@as(u4, 1), inst.b.?.reg);
 }
