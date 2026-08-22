@@ -1,14 +1,16 @@
 // move.4c - steer a pixel with the arrow keys
+
 u4 x = 8;
 u4 y = 8;
 
 fn main() {
-    while (true) {
-        cls();
-        flip(x, y);
-        if (btn_left())  { x -= 1; }
-        if (btn_right()) { x += 1; }
-        if (btn_up())    { y -= 1; }
-        if (btn_down())  { y += 1; }
-    }
+  while (true) {
+    cls();
+    flip(x, y);
+    
+    if (btn_left())  { x -= 1; }
+    if (btn_right()) { x += 1; }
+    if (btn_up())    { y -= 1; }
+    if (btn_down())  { y += 1; }
+  }
 }
