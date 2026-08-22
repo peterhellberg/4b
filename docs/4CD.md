@@ -220,12 +220,24 @@ fn slot() u4 {
 }
 ```
 
-Everything that stores to a user register or transfers control goes
-through `emitGated`; pure evaluation (`lda`, `inc`, shifts, staging into
-`r13`, comparisons) stays ungated. This makes the boot walk a strictly
-linear stream — every gated word is skipped, so control never branches
-while `PHASE` is 0 — which records every flag at its true position
-before the epilogue (`lda #1; sta r15; jmp @entry`, emitted last,
+Only *forward* jumps are phase-guarded — they are the only words that can
+outrun their target flag during the boot walk. Two guard forms exist:
+
+- **Conditional exits** (`if`/`while` joins): `lda #1; ifgt r15; jmp S`.
+  The condition's own skip decides whether the `lda #1` runs, so the jump
+  fires iff the condition is false and `PHASE` is 1.
+- **Unconditional forward jumps** (`break`, `continue`, the dynamic
+  arithmetic helper loops' exits): `lda r14; ifgt r15; jmp S`, which fires
+  iff `PHASE != 0` regardless of leftover `acc`.
+
+Backward jumps (loop backedges, `halt`'s spin) stay unguarded: their
+target flag was recorded earlier in the same linear pass, and the guard's
+acc load would be wrong there. Effect words (`sta`, `flip`, `cls`,
+`read`, `peek`) are also unguarded — they cannot divert control, and a
+guard's acc load would corrupt every store. The boot walk therefore
+*executes* all effects exactly once (one extra frame of work) while the
+phase guards suppress every forward jump, keeping the walk strictly
+linear until the epilogue (`lda #1; sta r15; jmp @entry`, emitted last,
 ungated) latches `PHASE` and restarts execution for real.
 
 Slot allocation is preorder and deterministic: a construct allocates its
@@ -235,9 +247,9 @@ see what to trim.
 
 Lowering catalog (normative shapes are in `docs/4CL.md` §7):
 
-- **Load/store**: `lda #k` / `lda rv`; store with gated `sta rv`.
+- **Load/store**: `lda #k` / `lda rv`; then an unguarded `sta rv`.
 - **± literal k**: `k` × `inc`; subtraction uses `(16-k)` × `inc`.
-- **Add loop** (`x += rd`, ~14 words, 2 slots): zero-guard, then a
+- **Add loop** (`x += rd`, ~16 words, 2 slots): zero-guard, then a
   bottom-tested count-up loop whose exit is fall-through:
 
   ```
@@ -249,7 +261,7 @@ Lowering catalog (normative shapes are in `docs/4CL.md` §7):
   F1: flag       ; slot F1 (loop top)
   lda rx
   inc
-  sta rx         ; gated: x += 1
+  sta rx         ; x += 1 (ungated)
   lda r13
   inc
   sta r13        ; counter += 1 (ungated: scratch only)
@@ -277,21 +289,21 @@ Lowering catalog (normative shapes are in `docs/4CL.md` §7):
   fn branchIfFalse(c: *const Cond, false_slot: u4) void
   ```
 
-  which emits the predicate plus the gated conditional-exit `jmp` for
+  which emits the predicate plus the guarded conditional-exit `jmp` for
   every condition shape; `&&`/`||` chains recurse with the *same*
   `false_slot`, which is what makes them free.
 - **if / while / break / continue**: templates from `docs/4CL.md` §7.3;
-  `break` emits a gated `jmp` to the enclosing loop's exit slot,
+  `break` emits a phase-guarded `jmp` to the enclosing loop's exit slot,
   `continue` to its top slot. Folded constants skip straight to the
   surviving template.
-- **Builtins**: `cls()` → gated `cls`, `buttons()` → ungated `read`
+- **Builtins**: `cls()` → plain `cls`, `buttons()` → plain `read`
   (writes `acc` only); `peek`/`flip` stage each argument through `r13`
-  unless it is already a plain variable, then emit one gated
-  `peek`/`flip` word; `btn_k()` = `read`, `k` × `shr`, `shl` × 3,
-  `shr` × 3; `halt()` = `flag S` + gated `jmp S`.
+  unless it is already a plain variable, then emit one `peek`/`flip`
+  word; `btn_k()` = `read`, `shl` × (3-k), `shr` × 3;
+  `halt()` = `flag S` + plain self-jump `jmp S`.
 - **Assignment**: evaluate the value expression (result in `acc`), then
-  gated `sta` of the target register. Compound forms expand through the
-  catalog above.
+  an unguarded `sta` of the target register. Compound forms expand
+  through the catalog above.
 - **Program shape**: global initializers first, in declaration order
   (ungated `lda #k; sta rv` — idempotent under replay), then `@entry`
   (slot 0) and the `main` body, then the ungated epilogue

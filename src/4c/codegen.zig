@@ -82,21 +82,31 @@ pub const Codegen = struct {
         return slot;
     }
 
-    /// Gate pair: skips the next word while PHASE == 0 (during the boot walk).
-    /// ifeq fires (skips payload) iff ZERO(0) == PHASE, i.e. before the latch.
-    fn gate(self: *Codegen) Error!void {
-        _ = try self.w(.lda_mem, PHASE, 0);
-        _ = try self.w(.ifeq, ZERO, 0);
-    }
-
+    /// Gate pair for conditional-exit jumps: the enclosing conditional skips
+    /// the `lda #1` iff the condition holds, leaving acc = 0 (from the
+    /// truthiness staging); falling through sets acc = 1. `ifgt r15` then
+    /// executes the jump iff PHASE > acc — i.e. the jump is taken only when
+    /// the condition is false and the boot walk has completed.
     fn gatedJmp(self: *Codegen, patch_idx: *usize) Error!void {
-        try self.gate();
+        _ = try self.w(.lda_imm, 1, 0);
+        _ = try self.w(.ifgt, PHASE, 0);
 
         patch_idx.* = try self.w(.jmp, 0, 0);
     }
 
     fn patchJmp(self: *Codegen, idx: usize, slot: usize) void {
         self.words.items[idx] = isa.encode(.jmp, @intCast(slot), 0);
+    }
+
+    /// Unconditional jump that fires only once PHASE != 0 (i.e. after the
+    /// boot walk has latched the phase). Normalizes acc first so behavior
+    /// never depends on leftover expression state. Used for backedges,
+    /// break and continue.
+    fn phaseJump(self: *Codegen, patch_idx: *usize) Error!void {
+        _ = try self.w(.lda_mem, ZERO, 0);
+        _ = try self.w(.ifgt, PHASE, 0);
+
+        patch_idx.* = try self.w(.jmp, 0, 0);
     }
 
     // ---- expressions (result left in acc) ----
@@ -107,17 +117,16 @@ pub const Codegen = struct {
             .boolean => |b| _ = try self.w(.lda_imm, @intFromBool(b), 0),
             .variable => |r| _ = try self.w(.lda_mem, @intCast(r), 0),
             .buttons => {
-                try self.gate();
                 _ = try self.w(.read, 0, 0);
             },
             .btn => |side| {
-                try self.gate();
                 _ = try self.w(.read, 0, 0);
+                // Isolate bit N into acc (see docs/4CL.md §7.4):
+                // shl x(3-N) moves bit N to the top of the nibble,
+                // then shr x3 drops everything but that bit.
                 var i: u4 = 0;
-                const shifts: u4 = @as(u4, @intFromEnum(side)) + 1;
-                while (i < shifts) : (i += 1) _ = try self.w(.shr, 0, 0);
-                i = 0;
-                while (i < 3) : (i += 1) _ = try self.w(.shl, 0, 0);
+                const up: u4 = 3 - @intFromEnum(side);
+                while (i < up) : (i += 1) _ = try self.w(.shl, 0, 0);
                 i = 0;
                 while (i < 3) : (i += 1) _ = try self.w(.shr, 0, 0);
             },
@@ -125,17 +134,14 @@ pub const Codegen = struct {
                 const xa = p.x.*;
                 const ya = p.y.*;
                 if (xa == .variable and ya == .variable) {
-                    try self.gate();
                     _ = try self.w(.peek, @intCast(xa.variable), @intCast(ya.variable));
                 } else if (xa == .variable) {
                     try self.evalExpr(p.y, line, col);
                     _ = try self.w(.sta, SCRATCH, 0);
-                    try self.gate();
                     _ = try self.w(.peek, @intCast(xa.variable), SCRATCH);
                 } else if (ya == .variable) {
                     try self.evalExpr(p.x, line, col);
                     _ = try self.w(.sta, SCRATCH, 0);
-                    try self.gate();
                     _ = try self.w(.peek, SCRATCH, @intCast(ya.variable));
                 } else {
                     return self.err(line, col, "at most one peek coordinate may be a computed value", .{});
@@ -247,6 +253,21 @@ pub const Codegen = struct {
                 if (b) try self.uncondPatch(patches);
             },
             .truthy => |e| {
+                // Fast path: btn_*() leaves acc = 0/1, so the phase guard
+                // alone selects — `ifgt r15` fires the exit iff PHASE(1) is
+                // greater than acc, i.e. iff the button is clear (and always
+                // while walking, when PHASE is 0). No staging needed.
+                if (e.* == .btn) {
+                    try self.evalExpr(e, line, col);
+                    _ = try self.w(.ifgt, PHASE, 0);
+
+                    var idx: usize = undefined;
+                    idx = try self.w(.jmp, 0, 0);
+                    try patches.append(self.alloc, idx);
+
+                    return;
+                }
+
                 // e != 0 is unsigned gt(e, 0)
                 try self.cmpBranch(.gt, e, &zero_expr, patches, line, col);
             },
@@ -404,13 +425,13 @@ pub const Codegen = struct {
             .while_stmt => |wh| try self.whileStmt(wh.cond, wh.body, s.line, s.col),
             .brk => {
                 var idx: usize = undefined;
-                try self.gatedJmp(&idx);
+                try self.phaseJump(&idx);
                 const lctx = &self.loops.items[self.loops.items.len - 1];
                 try lctx.brk_patches.append(self.alloc, idx);
             },
             .cont => {
                 var idx: usize = undefined;
-                try self.gatedJmp(&idx);
+                try self.phaseJump(&idx);
                 const top = self.loops.items[self.loops.items.len - 1].top_slot;
                 self.patchJmp(idx, top);
             },
@@ -444,7 +465,6 @@ pub const Codegen = struct {
 
                         _ = try self.w(.lda_imm, 0, 0);
 
-                        try self.gate();
 
                         _ = try self.w(.sta, r, 0);
 
@@ -460,7 +480,6 @@ pub const Codegen = struct {
                         };
 
                         try self.evalExpr(s.operand, line, col);
-                        try self.gate();
 
                         _ = try self.w(.sta, r, 0);
 
@@ -472,7 +491,6 @@ pub const Codegen = struct {
                 }
 
                 try self.evalExpr(value, line, col);
-                try self.gate();
 
                 _ = try self.w(.sta, r, 0);
             },
@@ -488,7 +506,6 @@ pub const Codegen = struct {
 
                             while (i < n) : (i += 1) _ = try self.w(.inc, 0, 0);
 
-                            try self.gate();
 
                             _ = try self.w(.sta, r, 0);
                         }
@@ -532,7 +549,6 @@ pub const Codegen = struct {
             while (i < 14) : (i += 1) _ = try self.w(.inc, 0, 0);
         }
 
-        try self.gate();
 
         _ = try self.w(.sta, target, 0);
 
@@ -541,11 +557,11 @@ pub const Codegen = struct {
         _ = try self.w(.sta, SCRATCH, 0);
         _ = try self.w(.ifeq, areg, 0);
 
-        var back_patch: usize = undefined;
+        // Backedge: bounded by the counter below, safe to leave ungated
+        // (firing during the boot walk just applies the mutation once).
+        const back_idx = try self.w(.jmp, 0, 0);
 
-        try self.gatedJmp(&back_patch);
-
-        self.patchJmp(back_patch, top);
+        self.patchJmp(back_idx, top);
 
         const exit = try self.flag(line, col);
 
@@ -573,7 +589,6 @@ pub const Codegen = struct {
         _ = try self.w(.lda_mem, target, 0);
         _ = try self.w(op, 0, 0);
 
-        try self.gate();
 
         _ = try self.w(.sta, target, 0);
 
@@ -582,11 +597,11 @@ pub const Codegen = struct {
         _ = try self.w(.sta, SCRATCH, 0);
         _ = try self.w(.ifeq, areg, 0);
 
-        var back_patch: usize = undefined;
+        // Backedge: bounded by the counter below, safe to leave ungated
+        // (firing during the boot walk just applies the mutation once).
+        const back_idx = try self.w(.jmp, 0, 0);
 
-        try self.gatedJmp(&back_patch);
-
-        self.patchJmp(back_patch, top);
+        self.patchJmp(back_idx, top);
 
         const exit = try self.flag(line, col);
 
@@ -596,15 +611,12 @@ pub const Codegen = struct {
     fn voidCall(self: *Codegen, vc: sema.VoidCall, line: u32, col: u32) Error!void {
         switch (vc) {
             .cls => {
-                try self.gate();
                 _ = try self.w(.cls, 0, 0);
             },
             .halt => {
                 const h = try self.flag(line, col);
 
-                var idx: usize = undefined;
-
-                try self.gatedJmp(&idx);
+                const idx = try self.w(.jmp, 0, 0);
 
                 self.patchJmp(idx, h);
             },
@@ -613,17 +625,14 @@ pub const Codegen = struct {
                 const ya = f.y.*;
 
                 if (xa == .variable and ya == .variable) {
-                    try self.gate();
                     _ = try self.w(.flip, @intCast(xa.variable), @intCast(ya.variable));
                 } else if (xa == .variable) {
                     try self.evalExpr(f.y, line, col);
                     _ = try self.w(.sta, SCRATCH, 0);
-                    try self.gate();
                     _ = try self.w(.flip, @intCast(xa.variable), SCRATCH);
                 } else {
                     try self.evalExpr(f.x, line, col);
                     _ = try self.w(.sta, SCRATCH, 0);
-                    try self.gate();
                     _ = try self.w(.flip, SCRATCH, @intCast(ya.variable));
                 }
             },
@@ -702,11 +711,10 @@ pub const Codegen = struct {
 
         const done = self.loops.pop() orelse unreachable;
 
-        // backedge
-        var back_patch: usize = undefined;
-        try self.gatedJmp(&back_patch);
-
-        self.patchJmp(back_patch, top);
+        // backedge — backward reference, always safe, stays ungated
+        var back_idx: usize = undefined;
+        try self.phaseJump(&back_idx);
+        self.patchJmp(back_idx, top);
 
         // EXIT flag: needed unless while(true) without break
         const has_breaks = done.brk_patches.items.len > 0;

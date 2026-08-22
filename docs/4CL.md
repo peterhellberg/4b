@@ -171,19 +171,24 @@ jump is therefore only sound once its target flag has executed.
 4C guarantees this structurally:
 
 1. At reset every register is 0, so `PHASE` (`r15`) starts at 0.
-2. Every side-effecting word (`sta`, `flip`, `cls`, `read`, `peek`,
-   `halt`'s spin) and every control-transfer `jmp` is preceded by the
-   gate pair `lda r15; ifeq r14`, which skips the gated word while
-   `PHASE` is 0.
-3. Execution therefore walks the whole program once at boot: gates skip
-   all payloads, no effects happen, and every `flag` records its true
-   position.
-4. The walk ends in the epilogue — `lda #1; sta r15; jmp @entry` — which
+2. Every *forward* `jmp` carries a two-word phase guard. A conditional
+   exit uses `lda #1; ifgt r15`: the condition's skip decides whether the
+   guard's load runs, so the jump fires iff the condition is false and
+   `PHASE` is 1. Unconditional forward jumps (`break`, `continue`, the
+   dynamic-arithmetic helper loops) use `lda r14; ifgt r15`, which fires
+   iff `PHASE != 0`. Backward jumps (loop backedges) and effect words
+   carry no guard: backward targets are recorded before the jump can
+   run, and effects are harmless while walking.
+3. Execution therefore walks the whole program once at boot: phase guards
+   suppress every forward jump, so no jump outruns its target; effects
+   execute once along the way (one extra frame of work), and every
+   `flag` records its true position.
+4. The walk reaches the epilogue — `lda #1; sta r15; jmp @entry` — which
    latches `PHASE` to 1 and restarts real execution with every slot
-   valid. From then on all gates pass through and the program runs with
-   exact semantics.
+   valid. From then on all phase guards pass through and the program
+   runs with exact semantics.
 
-The cost is two words per gated site plus one extra flag slot for the
+The cost is two words per forward jump plus one extra flag slot for the
 entry label; correctness never depends on program shape.
 
 ## 7. Semantics and lowering
@@ -249,8 +254,9 @@ through. Labels therefore cost one program word each, inside the flag
 slot they consume.
 
 Because slots are pre-recorded by the boot walk (§6.1), every `jmp` below
-is sound regardless of direction. In the shapes, **G** marks the gate
-pair `lda r15; ifeq r14` that prefixes a gated word:
+is sound regardless of direction. In the shapes, **G** marks the phase
+guard `lda #1; ifgt r15` (conditional exits) or `lda r14; ifgt r15`
+(`break` / `continue`) that prefixes a forward jump:
 
 | Construct            | Flag slots | Shape                                                        |
 |----------------------|-----------:|--------------------------------------------------------------|
@@ -259,13 +265,13 @@ pair `lda r15; ifeq r14` that prefixes a gated word:
 | `if (c) s else t`    | 2          | test, G `jmp` else, body, G `jmp` join, else, `flag` join    |
 | `while (c) s`        | 2          | `flag` top, test, G `jmp` exit, body, G `jmp` top, `flag` exit |
 | `break` / `continue` | 0          | G `jmp` to the enclosing loop's exit/top slot                |
-| `halt()`             | 1          | G-spin: `flag`, G `jmp` self                                 |
+| `halt()`             | 1          | spin: `flag`, `jmp` self                                     |
 
-Every side-effecting word in a body (`sta`, `flip`, `cls`, `read`,
-`peek`) carries its own gate pair; pure evaluation and comparison words
-stay ungated. During the boot walk every gate skips its payload, so the
-walk streams linearly through all shapes above, recording each flag at
-its true position, until the epilogue latches `PHASE`.
+Effect words (`sta`, `flip`, `cls`, `read`, `peek`) carry no guard: they
+are harmless while walking. During the boot walk every phase guard
+suppresses its forward jump, so the walk streams linearly through all
+shapes above — running the body's effects exactly once — recording each
+flag at its true position, until the epilogue latches `PHASE`.
 
 Constant conditions fold before lowering: `if (false)` emits nothing,
 `if (true)` emits its body directly, and `while (true)` keeps only its
@@ -289,8 +295,9 @@ walk, so compilation is reproducible.
 Coordinates may be arbitrary value expressions; the compiler stages them
 through scratch registers, since the machine reads `flip`/`peek`
 coordinates from registers. `btn_*` helpers lower to `read` plus shifts
-(e.g. `btn_up()` is `read; shr shr shl shl shl shr shr shr` — the idiom
-`examples/move.4a` performs by hand).
+(e.g. `btn_up()` is `read; shl; shr shr shr` — three words of shifting:
+`shl × (3-k)` lifts bit `k` to the top of the nibble, `shr × 3` drops
+everything else).
 
 ### 7.5 Evaluation order and expression limits
 
@@ -336,7 +343,7 @@ fn main() {
 ```
 
 Cost: 6 flag slots (`@entry`, the folded `while (true)` top, and one join
-per `if`) and comfortably under 256 instructions including gates.
+per `if`) and comfortably under 256 instructions including phase guards.
 
 ### 9.2 Button steering
 
