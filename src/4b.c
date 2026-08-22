@@ -132,10 +132,40 @@ static bool ends_with(const char *s, const char *suffix) {
   return ls >= lx && strcmp(s + ls - lx, suffix) == 0;
 }
 
+/* Headless debugging: run N instructions with a fixed button mask, then
+ * dump the VM state to stdout. */
+static void dump_vm(const VM *vm, long steps, unsigned buttons) {
+  printf("after %ld instructions (buttons=0x%X)\n", steps, buttons);
+  printf("pc=%u acc=%u\n", vm->pc, vm->acc);
+
+  for (int i = 0; i < 4; i++) {
+    for (int j = 0; j < 4; j++) {
+      int r = i * 4 + j;
+      printf("r%-2d=%-2u ", r, vm->regs[r] & 0x0F);
+    }
+    printf("\n");
+  }
+
+  printf("flags:");
+  for (int i = 0; i < 16; i++)
+    if (vm->flags[i] != 0)
+      printf(" %d=%u", i, vm->flags[i]);
+  printf("\n");
+
+  printf("screen:\n");
+  for (int y = 0; y < SCREEN_H; y++) {
+    for (int x = 0; x < SCREEN_W; x++)
+      printf("%c", vm->screen[y * SCREEN_W + x] ? '#' : '.');
+    printf("\n");
+  }
+}
+
 int main(int argc, char **argv) {
   const char *rom_path = NULL;
   int scale = DEFAULT_SCALE;
   int speed = DEFAULT_SPEED;
+  long debug_steps = -1;
+  unsigned buttons_mask = 0;
   Color fg = {0xd3, 0xc9, 0xa1, 255};
   Color bg = {0x32, 0x3c, 0x39, 255};
   bool help = false;
@@ -149,6 +179,17 @@ int main(int argc, char **argv) {
     else if ((strcmp(argv[i], "-n") == 0 || strcmp(argv[i], "--speed") == 0) &&
              i + 1 < argc)
       speed = atoi(argv[++i]);
+    else if ((strcmp(argv[i], "-d") == 0 ||
+              strcmp(argv[i], "--debug") == 0)) {
+      /* Optional step count; bare -d dumps immediately. */
+      debug_steps = 0;
+      if (i + 1 < argc && argv[i + 1][0] != '-') {
+        debug_steps = atol(argv[++i]);
+      }
+    } else if ((strcmp(argv[i], "-B") == 0 ||
+                strcmp(argv[i], "--buttons") == 0) &&
+               i + 1 < argc)
+      buttons_mask = (unsigned)strtoul(argv[++i], NULL, 0);
     else if ((strcmp(argv[i], "-p") == 0 ||
               strcmp(argv[i], "--palette") == 0)) {
       if (i + 1 >= argc || argv[i + 1][0] == '-') {
@@ -194,6 +235,10 @@ int main(int argc, char **argv) {
 
   if (help || !rom_path) {
     fprintf(stderr, "usage: 4b [flags] <rom.4b | source.4a | source.4c>\n");
+    fprintf(stderr,
+            "  -d, --debug N     run N instructions headless, dump state\n");
+    fprintf(stderr,
+            "  -B, --buttons M   held-button mask for the debug run\n");
     fprintf(stderr, "  -s, --scale N       pixel scale (default %d)\n",
             DEFAULT_SCALE);
     fprintf(stderr,
@@ -222,6 +267,7 @@ int main(int argc, char **argv) {
   static uint8_t assembled[ROM_SIZE];
   size_t rom_len;
   uint8_t *rom;
+  int heap_rom = 0;
 
   if (ends_with(rom_path, ".4a") || ends_with(rom_path, ".4c")) {
     /* Source file: assemble/compile with the embedded toolchain. */
@@ -253,8 +299,10 @@ int main(int argc, char **argv) {
 
     rom = assembled;
     rom_len = ROM_SIZE;
+    heap_rom = 0;
   } else {
     rom = read_file(rom_path, &rom_len);
+    heap_rom = 1;
     if (!rom) {
       fprintf(stderr, "4b: cannot read %s\n", rom_path);
 
@@ -274,6 +322,21 @@ int main(int argc, char **argv) {
 
   fourb_vm_init(&vm);
   fourb_vm_load_rom(&vm, rom, rom_len);
+
+  if (debug_steps >= 0) {
+    /* Headless debug run: hold the given button mask, tick N times, dump. */
+    for (long s = 0; s < debug_steps; s++) {
+      vm.buttons = (uint8_t)buttons_mask;
+      fourb_vm_tick(&vm);
+    }
+
+    dump_vm(&vm, debug_steps, buttons_mask);
+
+    if (heap_rom)
+      free(rom);
+
+    return 0;
+  }
 
   SetTraceLogLevel(LOG_ERROR);
 
