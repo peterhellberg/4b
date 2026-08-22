@@ -1,14 +1,16 @@
-// line.4c       ; horizontal line across the middle
+// line.4c - horizontal line across the middle
+
 u4 x = 0;
-u4 y = 7;
+u4 y = 7;  // middle row
 
 fn main() {
+  for {
+    cls();
+
     for {
-        cls();
-        for {
-            flip(x, y);
-            x += 1;
-            if (x == 0) { break; }
-        }
+      flip(x, y);                // draw one pixel of the row
+      x += 1;
+      if (x == 0) { break; }     // wrapped past the right edge
     }
+  }                              // the row is redrawn every sweep
 }

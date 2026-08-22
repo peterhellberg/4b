@@ -1,14 +1,14 @@
 // move.4c - steer a pixel with the arrow keys
 
-u4 x = 8;
-u4 y = 8;
+u4 x = 8;   // pixel column
+u4 y = 8;   // pixel row
 
 fn main() {
   for {
-    cls();
-    flip(x, y);
-    
-    if (btn_left())  { x -= 1; }
+    cls();         // clear the screen
+    flip(x, y);    // draw the pixel
+
+    if (btn_left())  { x -= 1; }  // movement wraps mod 16
     if (btn_right()) { x += 1; }
     if (btn_up())    { y -= 1; }
     if (btn_down())  { y += 1; }

@@ -1,17 +1,15 @@
-// updown.4c - flip a pixel while the up button is held
+// updown.4c - blink a pixel while the up button is held
 
-const UP = 4;
-
-u4 px = 8;
-u4 py = 8;
-u4 b;
+const UP = 4;   // button bit 2
+u4 px = 8;      // pixel column
+u4 py = 8;      // pixel row
+u4 b;           // raw button bits
 
 fn main() {
-  b = buttons();
-  
-  if ((b & UP) != 0) {
-    flip(px, py);
+  for {
+    b = buttons();
+    if ((b & UP) != 0) {
+      flip(px, py);  // toggling every frame makes it blink
+    }
   }
-  
-  halt();
 }

@@ -1,4 +1,5 @@
-// hello.4c      ; simplest program
+// hello.4c - simplest program
+
 fn main() {
-    halt();
+  halt();  // spin forever
 }

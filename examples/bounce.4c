@@ -1,11 +1,12 @@
-// bounce.4c     ; line moving diagonally, wrapping at edges
-u4 x = 0;
+// bounce.4c - line moving diagonally, wrapping at edges
+
+u4 x = 0;   // start in the top-left corner
 u4 y = 0;
 
 fn main() {
-    for {
-        flip(x, y);
-        x += 1;
-        y += 1;
-    }
+  for {
+    flip(x, y);  // toggle the current pixel
+    x += 1;      // step diagonally towards
+    y += 1;      // the bottom-right corner,
+  }              // wrapping from 15 back to 0
 }
