@@ -67,7 +67,7 @@ The assembler is also embedded in the `4b` console as a static library
     encoder.zig       # 12-bit words -> 384-byte image
     asm.zig           # C-ABI wrapper embedding the assembler in the console
     vm.zig            # the 4BoD VM, shared with the console
-    console.c         # raylib console (C)
+    4b.c              # raylib console (C)
     tests.zig         # golden + negative tests
     test/golden/      # *.4a golden sources; expected bytes live in tests.zig
 ```

@@ -246,7 +246,7 @@ test "vm: load rom unpacks lsb-first 12-bit words" {
     try std.testing.expectEqual(@as(u16, 0), vm.program[2]);
 }
 
-test "vm: c abi layout matches console.c" {
+test "vm: c abi layout matches 4b.c" {
     try std.testing.expectEqual(@as(usize, 0), @offsetOf(VM, "program"));
     try std.testing.expectEqual(@as(usize, 512), @offsetOf(VM, "regs"));
     try std.testing.expectEqual(@as(usize, 528), @offsetOf(VM, "acc"));

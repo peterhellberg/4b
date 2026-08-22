@@ -1,5 +1,4 @@
 const std = @import("std");
-const assembler = @import("assembler.zig");
 const compiler = @import("4c/compiler.zig");
 const asmout = @import("4c/asmout.zig");
 const diagnostics = @import("diagnostics.zig");
@@ -71,82 +70,52 @@ pub fn main(args: std.process.Init) u8 {
 
     var diag = diagnostics.Diag.init(alloc, input_path, src);
 
-    const is_4c = std.mem.endsWith(u8, input_path, ".4c");
-
-    if (is_4c) {
-        const out = compiler.compileWords(alloc, &diag, src) catch |e| switch (e) {
-            error.CompileFailed => {
-                diag.printAll();
-                return 1;
-            },
-            error.OutOfMemory => {
-                std.debug.print("error: out of memory\n", .{});
-                return 1;
-            },
-        };
-
-        if (diag.hasErrors()) {
+    const out = compiler.compileWords(alloc, &diag, src) catch |e| switch (e) {
+        error.CompileFailed => {
             diag.printAll();
             return 1;
-        }
+        },
+        error.OutOfMemory => {
+            std.debug.print("error: out of memory\n", .{});
+            return 1;
+        },
+    };
 
-        if (opts.emit_asm) |path| {
-            var text = std.ArrayList(u8).empty;
-            asmout.write(alloc, out.words, &text) catch {
-                std.debug.print("error: out of memory\n", .{});
-                return 1;
-            };
-            writeOutput(io, path, text.items) catch |e| {
-                std.debug.print("error: cannot write '{s}': {s}\n", .{ path, @errorName(e) });
-                return 1;
-            };
-        }
+    if (diag.hasErrors()) {
+        diag.printAll();
+        return 1;
+    }
 
-        var image: [384]u8 = undefined;
-        @import("encoder.zig").pack(out.words, &image);
+    if (opts.emit_asm) |path| {
+        var text = std.ArrayList(u8).empty;
 
-        const output_path = opts.output orelse defaultOutput(alloc, input_path);
-
-        std.Io.Dir.cwd().writeFile(io, .{
-            .sub_path = output_path,
-            .data = &image,
-        }) catch |e| {
-            std.debug.print("error: cannot write '{s}': {s}\n", .{
-                output_path,
-                @errorName(e),
-            });
+        asmout.write(alloc, out.words, &text) catch {
+            std.debug.print("error: out of memory\n", .{});
             return 1;
         };
-    } else {
-        const image = assembler.assemble(alloc, &diag, src) catch |e| switch (e) {
-            error.AssembleFailed => {
-                diag.printAll();
-                return 1;
-            },
-            error.OutOfMemory => {
-                std.debug.print("error: out of memory\n", .{});
-                return 1;
-            },
-        };
 
-        if (diag.hasErrors()) {
-            diag.printAll();
-            return 1;
-        }
-
-        const output_path = opts.output orelse defaultOutput(alloc, input_path);
-
-        std.Io.Dir.cwd().writeFile(io, .{
-            .sub_path = output_path,
-            .data = &image,
-        }) catch |e| {
-            std.debug.print("error: cannot write '{s}': {s}\n", .{
-                output_path,
-                @errorName(e),
-            });
+        writeOutput(io, path, text.items) catch |e| {
+            std.debug.print("error: cannot write '{s}': {s}\n", .{ path, @errorName(e) });
             return 1;
         };
     }
+
+    var image: [384]u8 = undefined;
+
+    @import("encoder.zig").pack(out.words, &image);
+
+    const output_path = opts.output orelse defaultOutput(alloc, input_path);
+
+    std.Io.Dir.cwd().writeFile(io, .{
+        .sub_path = output_path,
+        .data = &image,
+    }) catch |e| {
+        std.debug.print("error: cannot write '{s}': {s}\n", .{
+            output_path,
+            @errorName(e),
+        });
+        return 1;
+    };
 
     return 0;
 }
@@ -173,7 +142,7 @@ fn defaultOutput(alloc: std.mem.Allocator, input_path: []const u8) []const u8 {
 
 fn printUsage() void {
     std.debug.print(
-        \\Usage: 4a [options] <input.4a|.4c>
+        \\Usage: 4c [options] <input.4c>
         \\
         \\Options:
         \\  -o, --output <file>   output ROM path (default: <input stem>.4b)

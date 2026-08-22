@@ -8,7 +8,7 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "4a",
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("src/4a.zig"),
             .target = target,
             .optimize = optimize,
         }),
@@ -46,6 +46,45 @@ pub fn build(b: *std.Build) void {
     const run_asm_tests = b.addRunArtifact(asm_tests);
     test_step.dependOn(&run_asm_tests.step);
 
+    const compile_tests = b.addTest(.{
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/compile.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    const run_compile_tests = b.addRunArtifact(compile_tests);
+    test_step.dependOn(&run_compile_tests.step);
+
+    // ---- 4c compiler (pure Zig) ---------------------------------------------
+    const cexe = b.addExecutable(.{
+        .name = "4c",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/4c.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+    b.installArtifact(cexe);
+
+    const run_c_cmd = b.addRunArtifact(cexe);
+    run_c_cmd.step.dependOn(b.getInstallStep());
+    if (b.args) |args| run_c_cmd.addArgs(args);
+    b.step("4c", "Run 4c").dependOn(&run_c_cmd.step);
+
+    const compiler_tests = b.addTest(.{ .root_module = cexe.root_module });
+    const run_compiler_tests = b.addRunArtifact(compiler_tests);
+    test_step.dependOn(&run_compiler_tests.step);
+
+    const compile_lib = b.addLibrary(.{
+        .name = "compile",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/compile.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
+    });
+
     // ---- 4b console (Zig VM + C raylib) ------------------------------------
     const raylib_dep = b.lazyDependency("raylib", .{
         .target = target,
@@ -82,13 +121,14 @@ pub fn build(b: *std.Build) void {
     });
 
     console.root_module.addCSourceFile(.{
-        .file = b.path("src/console.c"),
+        .file = b.path("src/4b.c"),
         .flags = &.{"-std=c23"},
     });
     console.root_module.addIncludePath(raylib_dep.path("src"));
     console.root_module.linkLibrary(raylib);
     console.root_module.linkLibrary(vm_lib);
     console.root_module.linkLibrary(asm_lib);
+    console.root_module.linkLibrary(compile_lib);
     b.installArtifact(console);
 
     const run_console = b.addRunArtifact(console);
@@ -96,21 +136,33 @@ pub fn build(b: *std.Build) void {
     if (b.args) |a| run_console.addArgs(a);
     b.step("run", "Run 4b").dependOn(&run_console.step);
 
-    // ---- assemble example ROMs ----------------------------------------------
-    const compile_step = b.step("examples", "Assemble example .4b files");
-    const example_files = [_][]const u8{
+    // ---- build example ROMs ---------------------------------------------------
+    const examples_step = b.step("examples", "Assemble/compile example .4b files");
+    const asm_examples = [_][]const u8{
         "hello",
         "line",
         "fill",
-        "move",
-        "bounce",
     };
-    for (example_files) |name| {
+    for (asm_examples) |name| {
         const src = std.fmt.allocPrint(b.allocator, "examples/{s}.4a", .{name}) catch continue;
         const dst = std.fmt.allocPrint(b.allocator, "examples/{s}.4b", .{name}) catch continue;
-        const compile = b.addRunArtifact(exe);
+        const assemble = b.addRunArtifact(exe);
+        assemble.addFileArg(b.path(src));
+        assemble.addArgs(&.{ "-o", dst });
+        examples_step.dependOn(&assemble.step);
+    }
+
+    const c_examples = [_][]const u8{
+        "move",
+        "bounce",
+        "updown",
+    };
+    for (c_examples) |name| {
+        const src = std.fmt.allocPrint(b.allocator, "examples/{s}.4c", .{name}) catch continue;
+        const dst = std.fmt.allocPrint(b.allocator, "examples/{s}.4b", .{name}) catch continue;
+        const compile = b.addRunArtifact(cexe);
         compile.addFileArg(b.path(src));
         compile.addArgs(&.{ "-o", dst });
-        compile_step.dependOn(&compile.step);
+        examples_step.dependOn(&compile.step);
     }
 }

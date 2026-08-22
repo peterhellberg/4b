@@ -1,10 +1,12 @@
 # 4B
 
 A tiny fantasy console with a 16×16 1-bit screen, 16 nibble-wide registers,
-one accumulator, and 256 twelve-bit instructions — assembled with `4a` and
-run with `4b`.
+one accumulator, and 256 twelve-bit instructions — assembled with `4a`,
+compiled from 4C source with `4c`, and run with `4b`.
 See `docs/4AL.md` for the assembly language, `docs/4AD.md` for the assembler
-design notes, and `docs/4BoD.md` for the original 4BoD specification.
+design notes, `docs/4CL.md` for the 4C language, `docs/4CD.md` for the
+compiler design notes, and `docs/4BoD.md` for the original 4BoD
+specification.
 
 > [!NOTE]
 > 4B is based on the 4BoD specification, but this is not the official 4BoD
@@ -14,14 +16,18 @@ design notes, and `docs/4BoD.md` for the original 4BoD specification.
 
 ## Components
 
-- **`4a`** — the assembler, written in Zig (`src/main.zig`,
-  `src/compiler.zig`). It assembles `.4a` source into a 384-byte ROM image
+- **`4a`** — the assembler, written in Zig (`src/4a.zig`,
+  `src/assembler.zig`). It assembles `.4a` source into a 384-byte ROM image
   (`.4b`): 256 little-endian 12-bit words, padded with zeroes.
-- **`4b`** — the console, a C program (`src/console.c`) using
-  [raylib](https://www.raylib.com) for windowing and input. Both the VM
-  (`src/vm.zig`) and the assembler (`src/asm.zig`, a C-ABI shim over
-  `src/compiler.zig`) are compiled into static libraries that the console links
-  against, so a `.4a` source file can be assembled at startup.
+- **`4c`** — the 4C compiler (`src/4c.zig`, `src/4c/`). It compiles
+  `.4c` source into the same 384-byte ROM image, or into equivalent `.4a`
+  assembly text with `--emit-asm`.
+- **`4b`** — the console, a C program (`src/4b.c`) using
+  [raylib](https://www.raylib.com) for windowing and input. The VM
+  (`src/vm.zig`), the assembler (`src/asm.zig`) and the compiler
+  (`src/compile.zig`, C-ABI shims) are compiled into static libraries that
+  the console links against, so `.4a` source can be assembled and `.4c`
+  source compiled at startup.
 
 ## Building
 
@@ -68,10 +74,11 @@ minisign -Vm zig-x86_64-macos-0.17.0-dev.387+31f157d80.tar.xz \
 ### Commands
 
 ```
-zig build                # build both binaries into zig-out/bin/
-zig build test           # run assembler and VM unit tests
-zig build examples       # assemble all example programs to examples/*.4b
+zig build                # build all three binaries into zig-out/bin/
+zig build test           # run assembler, compiler and VM unit tests
+zig build examples       # assemble/compile all example programs to examples/*.4b
 zig build asm -- <args>       # run 4a directly
+zig build 4c -- <args>        # run 4c directly
 zig build run -- <args>       # run the 4b console directly
 ```
 
@@ -91,10 +98,23 @@ Options:
 The `-o` prefix form (`-ofile`) also works. On error, diagnostics with file
 position are printed and nothing is written.
 
+## Compiler usage
+
+```
+4c [options] <input.4c>
+
+Options:
+  -o, --output <file>   output ROM path (default: <input stem>.4b)
+  -S, --emit-asm <file> write text assembly too ('-' = stdout)
+  -h, --help            print usage and exit
+```
+
+See `docs/4CL.md` for the 4C language itself.
+
 ## Console usage
 
 ```
-4b [flags] <rom.4b | source.4a>
+4b [flags] <rom.4b | source.4a | source.4c>
 
   -s, --scale N       pixel scale (default 32)
   -n, --speed  N      instructions per frame (default 8)
@@ -103,8 +123,9 @@ position are printed and nothing is written.
   -b, --bg  COLOR     background color as R,G,B or hex (default 323c39)
 ```
 
-A file ending in `.4a` is treated as source and assembled at startup;
-anything else is loaded as a raw ROM image.
+A file ending in `.4a` is treated as source and assembled at startup, a file
+ending in `.4c` is compiled at startup; anything else is loaded as a raw ROM
+image.
 
 `-p` without a name lists the available palettes:
 `1bit-monitor-glow`, `obra-dinn-ibm-8503`, `pastelito2`, `casio-basic`,
@@ -122,13 +143,17 @@ The window title shows the ROM name.
 
 ## Examples
 
-| Program         | Description                                    |
-| --------------- | ---------------------------------------------- |
-| `examples/hello.4a`   | simplest possible program: an empty halt loop |
-| `examples/line.4a`    | horizontal line across the middle             |
-| `examples/fill.4a`    | fills the screen, then halts                  |
-| `examples/bounce.4a`  | pixel moving diagonally, wrapping at edges    |
-| `examples/move.4a`    | steer a single pixel with the arrow keys      |
+| Program                | Description                                    |
+| ---------------------- | ---------------------------------------------- |
+| `examples/hello.4a`    | simplest possible program: an empty halt loop |
+| `examples/line.4a`     | horizontal line across the middle             |
+| `examples/fill.4a`     | fills the screen, then halts                  |
+| `examples/bounce.4a`   | pixel moving diagonally, wrapping at edges    |
+| `examples/move.4a`     | steer a single pixel with the arrow keys      |
+
+`bounce` and `move` also exist as 4C source (`examples/bounce.4c`,
+`examples/move.4c`), plus `updown.4c` — flip a pixel while the up button is
+held.
 
 Assemble and run one manually:
 
@@ -151,7 +176,7 @@ zig build examples && zig build run -- examples/bounce.4b
 
 ## How the pieces fit together
 
-The console executable is C (`src/console.c`, raylib for windowing and
+The console executable is C (`src/4b.c`, raylib for windowing and
 input), but everything that matters lives in Zig, linked in as static
 libraries:
 
@@ -159,10 +184,13 @@ libraries:
   and into the native test suite, which exercises every opcode against the
   specification in `docs/4BoD.md` and `docs/4AL.md`.
 - **A pinned ABI** — the VM state is an `extern struct` whose layout mirrors
-  the `VM` struct in `console.c` byte for byte — program at offset 0,
+  the `VM` struct in `4b.c` byte for byte — program at offset 0,
   registers at 512, screen at 529, flag table at 786 — exposed through
   `vm_init`, `vm_tick` and `vm_load_rom`. A unit test pins these offsets so
   the two sides cannot drift apart.
 - **An embedded assembler** — `src/asm.zig` wraps the assembler behind a
   single C-ABI entry point (`bc_assemble`) that returns the 384-byte image
   and diagnostics, letting the console assemble `.4a` sources at startup.
+- **An embedded compiler** — `src/compile.zig` does the same for the 4C
+  compiler (`bc_compile`), letting the console compile `.4c` sources at
+  startup.

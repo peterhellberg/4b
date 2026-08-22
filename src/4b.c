@@ -56,6 +56,11 @@ extern void vm_load_rom(VM *vm, const uint8_t *data, size_t len);
 extern int bc_assemble(const char *path, const char *src, size_t src_len,
                        uint8_t *out, char *err, size_t err_len);
 
+/* Embedded 4c compiler (src/compile.zig): compiles .4c source into a
+ * 384-byte image. Returns 0 on success, non-zero with diagnostics in err. */
+extern int bc_compile(const char *path, const char *src, size_t src_len,
+                      uint8_t *out, char *err, size_t err_len);
+
 static uint8_t *read_file(const char *path, size_t *out_len) {
   FILE *f = fopen(path, "rb");
 
@@ -188,7 +193,7 @@ int main(int argc, char **argv) {
   }
 
   if (help || !rom_path) {
-    fprintf(stderr, "usage: 4b [flags] <rom.4b | source.4a>\n");
+    fprintf(stderr, "usage: 4b [flags] <rom.4b | source.4a | source.4c>\n");
     fprintf(stderr, "  -s, --scale N       pixel scale (default %d)\n",
             DEFAULT_SCALE);
     fprintf(stderr,
@@ -199,7 +204,8 @@ int main(int argc, char **argv) {
                     "(default d3c9a1)\n");
     fprintf(stderr, "  -b, --bg  COLOR     background color as R,G,B or hex "
                     "(default 323c39)\n");
-    fprintf(stderr, "\nA .4a source file is assembled at startup.\n");
+    fprintf(stderr, "\nA .4a source file is assembled and a .4c source file is"
+                    " compiled at startup.\n");
 
     return help ? 0 : 1;
   }
@@ -217,8 +223,9 @@ int main(int argc, char **argv) {
   size_t rom_len;
   uint8_t *rom;
 
-  if (ends_with(rom_path, ".4a")) {
-    /* Source file: assemble with the embedded 4a. */
+  if (ends_with(rom_path, ".4a") || ends_with(rom_path, ".4c")) {
+    /* Source file: assemble/compile with the embedded toolchain. */
+    int is_4c = ends_with(rom_path, ".4c");
     size_t src_len;
     char *src = (char *)read_file(rom_path, &src_len);
 
@@ -230,8 +237,12 @@ int main(int argc, char **argv) {
 
     char errs[4096];
 
-    if (bc_assemble(rom_path, src, src_len, assembled, errs, sizeof(errs)) !=
-        0) {
+    int rc = is_4c ? bc_compile(rom_path, src, src_len, assembled, errs,
+                                sizeof(errs))
+                   : bc_assemble(rom_path, src, src_len, assembled, errs,
+                                 sizeof(errs));
+
+    if (rc != 0) {
       fprintf(stderr, "%s", errs);
       free(src);
 

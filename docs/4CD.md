@@ -74,7 +74,7 @@ fully succeeds. The `-o` prefix form (`-ofile`) works as in `4a`.
   docs/              4BoD.md, 4AL.md, 4AD.md, 4CL.md, 4CD.md (this doc)
 ```
 
-`build.zig` gains an executable named `4c` rooted at `src/4c/main.zig`, a
+`build.zig` gains an executable named `4c` rooted at `src/4c.zig`, a
 run step (`zig build 4c -- args`), extra suites joined into
 `zig build test`, and an extended `examples` step that compiles
 `examples/*.4c` next to the existing `*.4a` assemblies.
