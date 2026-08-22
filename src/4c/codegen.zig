@@ -94,6 +94,14 @@ pub const Codegen = struct {
         patch_idx.* = try self.w(.jmp, 0, 0);
     }
 
+    /// Guard for screen/input effects: skips the next word while PHASE == 0
+    /// so the boot walk leaves no visual artifacts. Safe to use here because
+    /// these words do not consume the acc value the guard overwrites.
+    fn effectGuard(self: *Codegen) Error!void {
+        _ = try self.w(.lda_mem, ZERO, 0);
+        _ = try self.w(.ifgt, PHASE, 0);
+    }
+
     fn patchJmp(self: *Codegen, idx: usize, slot: usize) void {
         self.words.items[idx] = isa.encode(.jmp, @intCast(slot), 0);
     }
@@ -116,9 +124,11 @@ pub const Codegen = struct {
             .int => |k| _ = try self.w(.lda_imm, k, 0),
             .variable => |r| _ = try self.w(.lda_mem, @intCast(r), 0),
             .buttons => {
+                try self.effectGuard();
                 _ = try self.w(.read, 0, 0);
             },
             .btn => |side| {
+                try self.effectGuard();
                 _ = try self.w(.read, 0, 0);
                 // Isolate bit N into acc (see docs/4CL.md §7.4):
                 // shl x(3-N) moves bit N to the top of the nibble,
@@ -133,14 +143,17 @@ pub const Codegen = struct {
                 const xa = p.x.*;
                 const ya = p.y.*;
                 if (xa == .variable and ya == .variable) {
+                    try self.effectGuard();
                     _ = try self.w(.peek, @intCast(xa.variable), @intCast(ya.variable));
                 } else if (xa == .variable) {
                     try self.evalExpr(p.y, line, col);
                     _ = try self.w(.sta, SCRATCH, 0);
+                    try self.effectGuard();
                     _ = try self.w(.peek, @intCast(xa.variable), SCRATCH);
                 } else if (ya == .variable) {
                     try self.evalExpr(p.x, line, col);
                     _ = try self.w(.sta, SCRATCH, 0);
+                    try self.effectGuard();
                     _ = try self.w(.peek, SCRATCH, @intCast(ya.variable));
                 } else {
                     return self.err(line, col, "at most one peek coordinate may be a computed value", .{});
@@ -604,6 +617,7 @@ pub const Codegen = struct {
     fn voidCall(self: *Codegen, vc: sema.VoidCall, line: u32, col: u32) Error!void {
         switch (vc) {
             .cls => {
+                try self.effectGuard();
                 _ = try self.w(.cls, 0, 0);
             },
             .halt => {
@@ -618,14 +632,17 @@ pub const Codegen = struct {
                 const ya = f.y.*;
 
                 if (xa == .variable and ya == .variable) {
+                    try self.effectGuard();
                     _ = try self.w(.flip, @intCast(xa.variable), @intCast(ya.variable));
                 } else if (xa == .variable) {
                     try self.evalExpr(f.y, line, col);
                     _ = try self.w(.sta, SCRATCH, 0);
+                    try self.effectGuard();
                     _ = try self.w(.flip, @intCast(xa.variable), SCRATCH);
                 } else {
                     try self.evalExpr(f.x, line, col);
                     _ = try self.w(.sta, SCRATCH, 0);
+                    try self.effectGuard();
                     _ = try self.w(.flip, SCRATCH, @intCast(ya.variable));
                 }
             },
@@ -712,9 +729,17 @@ pub fn generate(
 
     try cg.stmt(prog.body);
 
-    // epilogue: latch phase, restart from entry (both ungated)
+    // epilogue: latch the phase, restore the initial variable values (the
+    // boot walk executes the body's effects once, which may have mutated
+    // them), then restart from the entry flag. All ungated.
     _ = try cg.w(.lda_imm, 1, 0);
     _ = try cg.w(.sta, PHASE, 0);
+
+    for (prog.vars) |v| {
+        _ = try cg.w(.lda_imm, v.init, 0);
+        _ = try cg.w(.sta, @intCast(v.reg), 0);
+    }
+
     _ = try cg.w(.jmp, 0, 0);
 
     return .{
