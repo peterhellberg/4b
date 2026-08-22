@@ -3,3 +3,6 @@
 
 # Assembled ROM images are binary
 *.4b binary
+
+# 4C language sources — highlight and count as C on GitHub
+*.4c linguist-language=C
