@@ -1,0 +1,14 @@
+// fill.4c       ; fill the entire screen
+u4 x = 0;
+u4 y = 0;
+
+fn main() {
+    for {
+        for {
+            flip(x, y);
+            x += 1;
+            if (x == 0) { break; }
+        }
+        y += 1;
+    }
+}

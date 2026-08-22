@@ -1,0 +1,14 @@
+// line.4c       ; horizontal line across the middle
+u4 x = 0;
+u4 y = 7;
+
+fn main() {
+    for {
+        cls();
+        for {
+            flip(x, y);
+            x += 1;
+            if (x == 0) { break; }
+        }
+    }
+}

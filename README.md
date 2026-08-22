@@ -156,7 +156,8 @@ The window title shows the ROM name.
 
 `bounce` and `move` also exist as 4C source (`examples/bounce.4c`,
 `examples/move.4c`), plus `updown.4c` — flip a pixel while the up button is
-held.
+held — and `hello.4c`, `line.4c` and `fill.4c` as direct translations of
+their `.4a` counterparts.
 
 Assemble and run one manually:
 

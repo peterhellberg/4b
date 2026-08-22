@@ -1,0 +1,4 @@
+// hello.4c      ; simplest program
+fn main() {
+    halt();
+}
