@@ -1,0 +1,17 @@
+; updown.4a     ; blink a pixel while the up button is held
+
+  lda #8
+  sta r8        ; x = 8
+  sta r9        ; y = 8
+
+@loop:
+  read          ; acc = button bits
+  shl
+  shr
+  shr
+  shr           ; isolate the up bit (bit 2)
+  sta r5        ; up = acc (0 or 1)
+  lda #0
+  ifgt r5       ; up held -> execute the flip
+  flip r8, r9   ; toggle the pixel
+  jmp @loop     ; repeat
