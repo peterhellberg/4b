@@ -77,9 +77,12 @@ minisign -Vm zig-x86_64-macos-0.17.0-dev.387+31f157d80.tar.xz \
 zig build                # build all three binaries into zig-out/bin/
 zig build test           # run assembler, compiler and VM unit tests
 zig build examples       # assemble/compile all example programs to examples/*.4b
-zig build asm -- <args>       # run 4a directly
-zig build 4c -- <args>        # run 4c directly
-zig build run -- <args>       # run the 4b console directly
+zig build 4a -- <args>        # assemble with 4a
+zig build 4c -- <args>        # compile with 4c
+zig build 4b -- <args>        # run in the console
+zig build assemble -- <args>  # alias for 4a
+zig build compile -- <args>   # alias for 4c
+zig build run -- <args>       # alias for 4b
 ```
 
 Standard Zig flags apply, e.g. `-Doptimize=ReleaseFast` or

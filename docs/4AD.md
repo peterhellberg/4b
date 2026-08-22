@@ -80,9 +80,11 @@ The toolchain is pinned to **`0.17.0-dev.387+31f157d80`**; recorded in
 
 | Step                    | What it does                                        |
 | ----------------------- | --------------------------------------------------- |
-| (default)               | build `4a` and the raylib console `4b`              |
-| `zig build asm -- …`    | run `4a` directly                                   |
-| `zig build run -- …`    | run the `4b` console                                |
+| (default)               | build `4a`, the 4C compiler `4c`, and console `4b`  |
+| `zig build 4a -- …`     | assemble with `4a`                                  |
+| `zig build 4c -- …`     | compile with `4c`                                   |
+| `zig build 4b -- …`     | run in the `4b` console                             |
+| `zig build run -- …`    | alias for `4b`                                      |
 | `zig build test`        | three suites: compiler module tests, VM tests, embedded-assembler tests |
 | `zig build examples`    | assemble every `examples/*.4a` to `examples/*.4b`   |
 

@@ -5,7 +5,7 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // ---- 4a assembler (pure Zig) -------------------------------------------
-    const exe = b.addExecutable(.{
+    const assembler = b.addExecutable(.{
         .name = "4a",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/4a.zig"),
@@ -13,15 +13,16 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    b.installArtifact(exe);
+    b.installArtifact(assembler);
 
-    const run_cmd = b.addRunArtifact(exe);
+    const run_cmd = b.addRunArtifact(assembler);
     run_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| run_cmd.addArgs(args);
-    const run_step = b.step("asm", "Run 4a");
-    run_step.dependOn(&run_cmd.step);
+    const asm_step = b.step("4a", "Assemble with 4a");
+    asm_step.dependOn(&run_cmd.step);
+    b.step("assemble", "Alias for 4a").dependOn(asm_step);
 
-    const unit_tests = b.addTest(.{ .root_module = exe.root_module });
+    const unit_tests = b.addTest(.{ .root_module = assembler.root_module });
     const run_tests = b.addRunArtifact(unit_tests);
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_tests.step);
@@ -57,7 +58,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_compile_tests.step);
 
     // ---- 4c compiler (pure Zig) ---------------------------------------------
-    const cexe = b.addExecutable(.{
+    const compiler = b.addExecutable(.{
         .name = "4c",
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/4c.zig"),
@@ -65,14 +66,16 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
         }),
     });
-    b.installArtifact(cexe);
+    b.installArtifact(compiler);
 
-    const run_c_cmd = b.addRunArtifact(cexe);
+    const run_c_cmd = b.addRunArtifact(compiler);
     run_c_cmd.step.dependOn(b.getInstallStep());
     if (b.args) |args| run_c_cmd.addArgs(args);
-    b.step("4c", "Run 4c").dependOn(&run_c_cmd.step);
+    const compile_step = b.step("4c", "Compile with 4c");
+    compile_step.dependOn(&run_c_cmd.step);
+    b.step("compile", "Alias for 4c").dependOn(compile_step);
 
-    const compiler_tests = b.addTest(.{ .root_module = cexe.root_module });
+    const compiler_tests = b.addTest(.{ .root_module = compiler.root_module });
     const run_compiler_tests = b.addRunArtifact(compiler_tests);
     test_step.dependOn(&run_compiler_tests.step);
 
@@ -86,13 +89,6 @@ pub fn build(b: *std.Build) void {
     });
 
     // ---- 4b console (Zig VM + C raylib) ------------------------------------
-    const raylib_dep = b.lazyDependency("raylib", .{
-        .target = target,
-        .optimize = optimize,
-    }) orelse return;
-
-    const raylib = raylib_dep.artifact("raylib");
-
     const vm_lib = b.addLibrary(.{
         .name = "vm",
         .root_module = b.createModule(.{
@@ -124,8 +120,12 @@ pub fn build(b: *std.Build) void {
         .file = b.path("src/4b.c"),
         .flags = &.{"-std=c23"},
     });
-    console.root_module.addIncludePath(raylib_dep.path("src"));
-    console.root_module.linkLibrary(raylib);
+
+    if (!addRaylib(console.root_module, b.lazyDependency("raylib", .{
+        .target = target,
+        .optimize = optimize,
+    }) orelse return)) return;
+
     console.root_module.linkLibrary(vm_lib);
     console.root_module.linkLibrary(asm_lib);
     console.root_module.linkLibrary(compile_lib);
@@ -133,8 +133,10 @@ pub fn build(b: *std.Build) void {
 
     const run_console = b.addRunArtifact(console);
     run_console.step.dependOn(b.getInstallStep());
-    if (b.args) |a| run_console.addArgs(a);
-    b.step("run", "Run 4b").dependOn(&run_console.step);
+    if (b.args) |args| run_console.addArgs(args);
+    const console_step = b.step("4b", "Run ROM in the console");
+    console_step.dependOn(&run_console.step);
+    b.step("run", "Alias for 4b").dependOn(console_step);
 
     // ---- build example ROMs ---------------------------------------------------
     const examples_step = b.step("examples", "Assemble/compile example .4b files");
@@ -146,7 +148,7 @@ pub fn build(b: *std.Build) void {
     for (asm_examples) |name| {
         const src = std.fmt.allocPrint(b.allocator, "examples/{s}.4a", .{name}) catch continue;
         const dst = std.fmt.allocPrint(b.allocator, "examples/{s}.4b", .{name}) catch continue;
-        const assemble = b.addRunArtifact(exe);
+        const assemble = b.addRunArtifact(assembler);
         assemble.addFileArg(b.path(src));
         assemble.addArgs(&.{ "-o", dst });
         examples_step.dependOn(&assemble.step);
@@ -160,9 +162,83 @@ pub fn build(b: *std.Build) void {
     for (c_examples) |name| {
         const src = std.fmt.allocPrint(b.allocator, "examples/{s}.4c", .{name}) catch continue;
         const dst = std.fmt.allocPrint(b.allocator, "examples/{s}.4b", .{name}) catch continue;
-        const compile = b.addRunArtifact(cexe);
+        const compile = b.addRunArtifact(compiler);
         compile.addFileArg(b.path(src));
         compile.addArgs(&.{ "-o", dst });
         examples_step.dependOn(&compile.step);
     }
+}
+
+/// Compile raylib (desktop GLFW backend) directly into the given module and
+/// link its platform libraries, instead of linking the dependency's static
+/// archive, which embeds resolved system libraries as archive members and
+/// makes the linker emit warnings for each of them.
+///
+/// Returns false when the target platform is unsupported.
+fn addRaylib(
+    mod: *std.Build.Module,
+    raylib_dep: *std.Build.Dependency,
+) bool {
+    const target = mod.resolved_target.?.result;
+
+    const rl_src = raylib_dep.path("src");
+
+    mod.addIncludePath(rl_src);
+    mod.addIncludePath(raylib_dep.path("src/platforms"));
+    mod.addIncludePath(raylib_dep.path("src/external/glfw/include"));
+
+    mod.addCMacro("_GNU_SOURCE", "");
+    mod.addCMacro("GL_SILENCE_DEPRECATION", "199309L");
+    mod.addCMacro("SUPPORT_MODULE_RSHAPES", "1");
+    mod.addCMacro("SUPPORT_MODULE_RTEXTURES", "1");
+    mod.addCMacro("SUPPORT_MODULE_RTEXT", "1");
+    mod.addCMacro("SUPPORT_MODULE_RMODELS", "1");
+    mod.addCMacro("SUPPORT_MODULE_RAUDIO", "1");
+    mod.addCMacro("PLATFORM_DESKTOP_GLFW", "");
+    mod.addCMacro("GRAPHICS_API_OPENGL_33", "");
+
+    switch (target.os.tag) {
+        .linux => {
+            mod.addCMacro("_GLFW_X11", "");
+            inline for (.{ "GL", "X11", "Xrandr", "Xinerama", "Xi", "Xcursor" }) |lib| {
+                mod.linkSystemLibrary(lib, .{});
+            }
+        },
+        .windows => {
+            inline for (.{ "opengl32", "winmm", "gdi32" }) |lib| {
+                mod.linkSystemLibrary(lib, .{});
+            }
+        },
+        .macos => {
+            inline for (.{ "Foundation", "CoreServices", "CoreGraphics", "AppKit", "IOKit", "QuartzCore" }) |fw| {
+                mod.linkFramework(fw, .{});
+            }
+        },
+        else => return false,
+    }
+
+    mod.addCSourceFiles(.{
+        .root = rl_src,
+        .files = &.{
+            "rcore.c",
+            "rshapes.c",
+            "rtextures.c",
+            "rtext.c",
+            "rmodels.c",
+            "raudio.c",
+        },
+        .flags = &.{"-std=c99"},
+    });
+
+    // rglfw.c includes Objective-C on macOS and must be compiled separately.
+    const glfw_flags: []const []const u8 = if (target.os.tag == .macos)
+        &.{ "-std=c99", "-ObjC" }
+    else
+        &.{"-std=c99"};
+    mod.addCSourceFile(.{
+        .file = raylib_dep.path("src/rglfw.c"),
+        .flags = glfw_flags,
+    });
+
+    return true;
 }

@@ -87,7 +87,7 @@ Same pinned toolchain as the 4A design (`docs/4AD.md` §6); after this change
 | Step                       | What it does                                    |
 | -------------------------- | ----------------------------------------------- |
 | (default)                  | build all three binaries                        |
-| `zig build 4c -- …`        | run `4c` directly                               |
+| `zig build 4c -- …`         | run `4c` directly                               |
 | `zig build test`           | adds the 4C suites to the existing steps        |
 | `zig build examples`       | also compiles every `examples/*.4c`             |
 
