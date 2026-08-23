@@ -59,19 +59,19 @@ fully succeeds. The `-o` prefix form (`-ofile`) works as in `4a`.
 ```
 4b/
   src/
+    4c.zig         CLI, driver, file I/O
     4c/
-      main.zig       CLI, driver, file I/O
-      compiler.zig   pipeline driver: lex -> parse -> sema -> codegen -> pack
-      lexer.zig      tokens for 4C surface syntax
-      parser.zig     tokens -> AST
-      ast.zig        AST node types
-      sema.zig       decl tables, folding, register allocation, checks
-      codegen.zig    flag-slot allocator + word emission
-      emit_asm.zig   words -> .4a text
+      compiler.zig pipeline driver: lex -> parse -> sema -> codegen -> pack
+      lexer.zig    tokens for 4C surface syntax
+      parser.zig   tokens -> AST
+      ast.zig      AST node types
+      sema.zig     decl tables, folding, register allocation, checks
+      codegen.zig  flag-slot allocator + word emission
+      emit_asm.zig words -> .4a text
     rom.zig        reused as-is: pack(words) -> [384]u8
-    dia.zig          reused as-is: Diag with line/col + caret snippets
-  examples/*.4c      demo programs (added with the implementation)
-  docs/              4BoD.md, 4AL.md, 4AD.md, 4CL.md, 4CD.md (this doc)
+    dia.zig        reused as-is: Diag with line/col + caret snippets
+  examples/*.4c    demo programs (added with the implementation)
+  docs/            4BoD.md, 4AL.md, 4AD.md, 4CL.md, 4CD.md (this doc)
 ```
 
 `build.zig` gains an executable named `4c` rooted at `src/4c.zig`, a
@@ -92,7 +92,7 @@ Same pinned toolchain as the 4A design (`docs/4AD.md` §6); after this change
 | `zig build examples`       | also compiles every `examples/*.4c`             |
 
 The std-API churn caveats from `docs/4AD.md` §16 apply unchanged; keep file
-I/O isolated in `main.zig`.
+I/O isolated in `4c.zig`.
 
 ## 7. Pipeline
 
@@ -206,11 +206,22 @@ fn emit(op: Op, a: u4, b: u4) void {
     if (pos > 256) diag.err(..., "program exceeds 256 instructions");
 }
 
-/// Gate pair + payload: skips `op` while PHASE is 0.
-fn emitGated(op: Op, a: u4, b: u4) void {
-    emit(.lda, 15, 0);          // lda r15   (PHASE)
-    emit(.ifeq, 14, 0);         // ifeq r14  (ZERO) -> skip payload at boot
-    emit(op, a, b);
+/// Phase guard + forward jump: fires only after the boot walk has
+/// latched PHASE. Normalizes acc first so behavior never depends on
+/// leftover expression state.
+fn emitPhaseJump(slot: u4) void {
+    emit(.lda_mem, ZERO, 0);    // lda r14  (acc = 0)
+    emit(.ifgt, PHASE, 0);      // ifgt r15 -> fire iff PHASE > 0
+    emit(.jmp, slot, 0);
+}
+
+/// Conditional-exit variant used by if/while: the condition's own skip
+/// decides whether the `lda #1` runs, so the jump fires iff the condition
+/// is false and PHASE is 1.
+fn emitGatedJmp(slot: u4) void {
+    emit(.lda_imm, 1, 0);       // lda #1
+    emit(.ifgt, PHASE, 0);      // ifgt r15 -> fire iff PHASE > acc
+    emit(.jmp, slot, 0);
 }
 
 fn slot() u4 {
@@ -317,16 +328,16 @@ chains flatten before lowering.
 
 Rendered after a successful compile, from the final word list:
 
-1. Scan the words for `flag` instructions (opcode `0xB`) and record each
-   slot's position.
-2. Emit one line per word. At a flag position, print the synthetic label
-   (`@fN:` for slot N) on its own line first.
-3. Render instructions in 4A syntax: mnemonics lowercase, registers `rN`,
-   immediates `#k`, jumps/flags as `@fN`.
+1. Emit one line per word; the mnemonic comes from the ISA signature
+   table (`isa.specs`), padded to a fixed operand column.
+2. Registers render as `rN`, immediates as `#k`, and `flag`/`jmp`
+   operands as plain decimal slot numbers — bare numbers, since `@name`
+   in 4A is reserved for label references.
+3. Operand-less instructions carry no trailing padding.
 
-The output deliberately stays inside 4A's rules (≤ 15 labels, case-
-insensitive identifiers, `;` comments), so `4a` reassembles it byte-for-
-byte identical to the direct image — the property tested in §16.
+The output deliberately stays inside 4A's rules, so `4a` reassembles it
+byte-for-byte identical to the direct image — the property tested in
+§16.
 
 ## 14. Error handling and diagnostics
 
@@ -361,12 +372,12 @@ All run by `zig build test`:
      rejections, initializer folding;
    - codegen: exact word sequences for every §12 catalog entry (golden
      fragments asserted inline);
-   - emit_asm: label placement, `@fN` rendering.
-2. **Golden tests**: the three `docs/4CL.md` §9 examples compiled to
-   complete 384-byte images with expected bytes inline in `assembler.zig`.
-3. **Round-trip tests**: for each golden, feed the `--emit-asm` text back
-   through the existing 4A pipeline (`compiler.zig`) and assert the second
-   image equals the first byte-for-byte.
+   - emit_asm: mnemonic column layout and numeric slot rendering.
+2. **Golden tests**: golden `.4a` sources assembled to complete
+   384-byte images with expected bytes inline.
+3. **Round-trip tests**: for each `.4c` example, feed the `--emit-asm`
+   text back through the existing 4A pipeline (`assembler.zig`) and assert
+   the second image equals the first byte-for-byte.
 4. **Negative tests**: every error class in `docs/4CL.md` §10 produces a
    diagnostic containing the expected substring (`out of flag slots`,
    `contiguous`, `exceeds 256 instructions`, …).
@@ -376,13 +387,15 @@ All run by `zig build test`:
    behavior (the bounce pixel toggles, `move` responds to a synthetic
    `buttons` value).
 
-End-to-end sanity check (manual): `zig-out/bin/4c examples/move.4c` then
+End-to-end sanity checks (manual): `zig-out/bin/4b -d N [-B mask]`
+examples/*.4c dumps machine state after exactly N instructions (this is
+how the lowering bugs in §18 were found), and
 `zig-out/bin/4b examples/move.4b` steers the pixel with arrow keys.
 
 ## 17. Zig pin notes and risks
 
 - Toolchain pinned to `0.17.0-dev.387+31f157d80`; std churn notes from
-  `docs/4AD.md` §16 apply verbatim (keep I/O in `main.zig`; isolate layout
+  `docs/4AD.md` §16 apply verbatim (keep I/O in `4c.zig`; isolate layout
   knowledge).
 - Reusing `rom.zig`/`dia.zig` across both tools is deliberate: one
   packing implementation, one diagnostic format, tested twice.
@@ -391,8 +404,23 @@ End-to-end sanity check (manual): `zig-out/bin/4c examples/move.4c` then
 
 ## 18. Status
 
-Planned. This document precedes the implementation; notable deviations will
-be recorded here once `4c` exists, as done for `4a` in `docs/4AD.md` §18.
+Implemented; notable deviations from this document as originally written:
+
+- **Loop syntax**: `while (true)` became Go-style `for {}`, and the
+  boolean literals `true`/`false` were removed (nothing else used them).
+  The keyword set is now `u4 fn const for if else break continue`.
+- **Phase guards**: the original per-effect gate (`lda r15; ifeq r14`)
+  was unsound — it clobbered `acc` before every gated `sta` (all variable
+  writes stored garbage) and its polarity let forward jumps fire during
+  the boot walk with unrecorded flag slots, restarting at address 0
+  forever. Guards now prefix only *forward* jumps (see §12), effect words
+  run ungated, and the epilogue replays the global initializers after
+  latching so boot-walk mutations are undone.
+- **`btn_*` bit extraction**: `shl × (3-k); shr × 3` (the original
+  `shr × k` first read bits 1..4 instead of 0..3), and `if (btn_k())`
+  conditions reuse the extraction result directly instead of re-staging.
+- **emit_asm**: renders bare decimal flag slots rather than synthetic
+  `@fN` labels, and aligns operands to a fixed mnemonic column.
 
 ## 19. Open questions
 

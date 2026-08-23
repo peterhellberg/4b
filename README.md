@@ -115,21 +115,31 @@ Options:
 
 See `docs/4CL.md` for the 4C language itself.
 
-## Console usage
+## Box usage
 
 ```
-4b [flags] <rom.4b | source.4a | source.4c>
+4b [options] <rom.4b | source.4a | source.4c>
 
-  -s, --scale N       pixel scale (default 32)
-  -n, --speed  N      instructions per frame (default 8)
+  -s, --scale N       window scale (default 32)
+  -n, --speed N       instructions per frame (default 8)
   -p, --palette NAME  use a named palette
-  -f, --fg  COLOR     foreground color as R,G,B or hex (default d3c9a1)
-  -b, --bg  COLOR     background color as R,G,B or hex (default 323c39)
+  -f, --fg COLOR      foreground color as R,G,B or hex (default d3c9a1)
+  -b, --bg COLOR      background color as R,G,B or hex (default 323c39)
+  -d, --debug N       run N instructions headless, then dump state
+  -B, --buttons M     held-button mask for the debug run
+  -t, --trace         print pc/acc/x/y before every tick (with -d)
 ```
 
 A file ending in `.4a` is treated as source and assembled at startup, a file
 ending in `.4c` is compiled at startup; anything else is loaded as a raw ROM
 image.
+
+The debug mode runs the ROM headless for exactly N instructions — no
+window — and prints the machine state: program counter, accumulator,
+all sixteen registers, the recorded flag slots and the screen as a
+16×16 grid with a lit-pixel count. `-B` holds a fixed button mask
+during the run (`-B 2` simulates holding right), and `-t` prints one
+line per tick before it executes.
 
 `-p` without a name lists the available palettes:
 `1bit-monitor-glow`, `obra-dinn-ibm-8503`, `pastelito2`, `casio-basic`,

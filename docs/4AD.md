@@ -56,8 +56,9 @@ The assembler is also embedded in the `4b` box as a static library
   docs/               # 4BoD.md (machine), 4AL.md (language), 4AD.md (this doc)
   examples/           # *.4a demo programs; zig build examples emits *.4b
   src/
-    main.zig          # CLI, driver, file I/O
-    compiler.zig      # pipeline driver: lex -> parse -> pass 1 -> pass 2 -> pack
+    4a.zig            # CLI, driver, file I/O
+    assembler.zig     # pipeline driver: lex -> parse -> pass 1 -> pass 2 -> pack,
+                      # plus the C-ABI entry point for the box (§17)
     dia.zig           # errors with line/col and source snippets
     lexer.zig         # tokens
     parser.zig        # tokens -> items
@@ -65,7 +66,6 @@ The assembler is also embedded in the `4b` box as a static library
     symbols.zig       # label/const tables, flag-slot allocation (pass 1)
     codegen.zig       # word emission (pass 2)
     rom.zig           # Rom image type + 12-bit words -> 384-byte packing
-    assembler.zig     # pipeline + C-ABI entry point for the box (§17)
     vm.zig            # the 4B VM, shared with the box
     4b.c              # raylib box (C)
     (assembler tests live inline in assembler.zig)
@@ -75,28 +75,28 @@ The assembler is also embedded in the `4b` box as a static library
 ## 6. Build (Zig 0.17.0-dev.387+31f157d80)
 
 The toolchain is pinned to **`0.17.0-dev.387+31f157d80`**; recorded in
-`build.zig.zon`. `zig build` installs both binaries (`4a`, `4b`) into
-`zig-out/bin/`. Steps:
+`build.zig.zon`. `zig build` installs all three binaries (`4a`, `4c`,
+`4b`) into `zig-out/bin/`. Steps:
 
 | Step                    | What it does                                        |
 | ----------------------- | --------------------------------------------------- |
-| (default)               | build `4a`, the 4C compiler `4c`, and box `4b`  |
+| (default)               | build `4a`, the 4C compiler `4c`, and box `4b`      |
 | `zig build 4a -- …`     | assemble with `4a`                                  |
 | `zig build 4c -- …`     | compile with `4c`                                   |
-| `zig build 4b -- …`     | run in the `4b` box                             |
+| `zig build 4b -- …`     | run in the `4b` box                                 |
 | `zig build run -- …`    | alias for `4b`                                      |
-| `zig build test`        | three suites: compiler module tests, VM tests, embedded-assembler tests |
-| `zig build examples`    | assemble every `examples/*.4a` to `examples/*.4b`   |
+| `zig build test`        | six suites: both CLIs, assembler/compiler pipelines, rom packing, VM |
+| `zig build examples`    | build every `examples/*.{4a,4c}` to `examples/*.4b` |
 
-The box links against two Zig static libraries built from this repo:
-`vm.zig` (the machine) and `assembler.zig` (this assembler, with its C-ABI
-entry point); raylib is fetched by the Zig package manager and built from
-source.
+The box links against three Zig static libraries built from this repo:
+`vm.zig` (the machine), `assembler.zig` (the assembler) and
+`4c/compiler.zig` (the compiler), each exposing a C-ABI entry point;
+raylib is fetched by the Zig package manager and built from source.
 
 > **Note.** `0.17.0-dev.387+31f157d80` sits mid-stream of the `std.Io`
 > rewrite and the `ArrayList` unmanaged/managed merge; std APIs can shift
 > between dev builds. The pin above is the contract: code against it, and keep
-> file I/O isolated in `main.zig` so any future bump touches one file. `zig
+> file I/O isolated in `4a.zig` so any future bump touches one file. `zig
 > build`, `zig build test`, and `zig build run -- file.4b` should "just work".
 
 ## 7. Pipeline
@@ -274,7 +274,7 @@ file.4a:12:7: error: undefined label '@start'
    ...^
 ```
 
-- Errors are collected during the passes in encounter order; `main.zig` prints
+- Errors are collected during the passes in encounter order; `4a.zig` prints
   them all and exits non-zero if any exist.
 - `Diag` owns the error list (`{ msg, line, col }`) and a line-start index
   built at init, so snippets never require re-scanning the source.
@@ -317,7 +317,7 @@ confirm the middle row of pixels lights up.
 
 - Toolchain is pinned to **`0.17.0-dev.387+31f157d80`** (recorded in
   `build.zig.zon`); std APIs are churning (`std.Io` writer/reader types,
-  `std.ArrayList` unmanaged/managed merge, build API). Keep I/O in `main.zig`
+  `std.ArrayList` unmanaged/managed merge, build API). Keep I/O in `4a.zig`
   and the ISA/bit layout in `isa.zig`/`rom.zig` so churn is localized.
 - **ROM byte-order**: the canonical packing (§12) is LSB-first and is
   confirmed by the bundled VM (`fourb_vm_load_rom` unpacks the same layout) and by
