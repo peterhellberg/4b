@@ -2,6 +2,8 @@
 
 # 4B
 
+[![CI](https://github.com/peterhellberg/4b/actions/workflows/ci.yml/badge.svg)](https://github.com/peterhellberg/4b/actions/workflows/ci.yml)
+
 **A tiny fantasy console** with a 16×16 1-bit screen, 16 nibble-wide
 registers, one accumulator, and 256 twelve-bit instructions.
 
