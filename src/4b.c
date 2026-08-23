@@ -135,7 +135,8 @@ static bool ends_with(const char *s, const char *suffix) {
 /* Headless debugging: run N instructions with a fixed button mask, then
  * dump the VM state to stdout. */
 static void dump_vm(const VM *vm, long steps, unsigned buttons) {
-  printf("after %ld instructions (buttons=0x%X)\n", steps, buttons);
+  printf("after %ld instruction%s (buttons=0x%X)\n", steps,
+          steps == 1 ? "" : "s", buttons);
   printf("pc=%u acc=%u\n", vm->pc, vm->acc);
 
   for (int i = 0; i < 4; i++) {
@@ -147,9 +148,18 @@ static void dump_vm(const VM *vm, long steps, unsigned buttons) {
   }
 
   printf("flags:");
-  for (int i = 0; i < 16; i++)
-    if (vm->flags[i] != 0)
+  int any_flag = 0;
+
+  for (int i = 0; i < 16; i++) {
+    if (vm->flags[i] != 0) {
       printf(" %d=%u", i, vm->flags[i]);
+      any_flag = 1;
+    }
+  }
+
+  if (!any_flag)
+    printf(" (none)");
+
   printf("\n");
 
   printf("screen:\n");
