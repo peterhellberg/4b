@@ -25,7 +25,7 @@ jobs:
 
       - name: Cache Zig
         id: cache-zig
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/zig
           key: zig-${{ env.ZIG_VERSION }}-linux-x86_64
