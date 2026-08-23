@@ -107,7 +107,7 @@ zig build test                 # run all unit tests
 
 zig build 4a -- <args>         # assemble with 4a
 zig build 4c -- <args>         # compile with 4c
-zig build 4b -- <args>         # run in the box
+zig build 4b -- <args>         # run with 4b
 
 zig build assemble -- <args>   # alias for 4a
 zig build compile -- <args>    # alias for 4c
