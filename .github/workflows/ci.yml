@@ -30,6 +30,16 @@ jobs:
           path: ${{ runner.temp }}/zig
           key: zig-${{ env.ZIG_VERSION }}-linux-x86_64
 
+      - name: Cache Zig build caches
+        uses: actions/cache@v6
+        with:
+          path: |
+            .zig-cache
+            zig-pkg
+          key: zcache-${{ runner.os }}-${{ env.ZIG_VERSION }}
+          restore-keys: |
+            zcache-${{ runner.os }}-
+
       # The pinned version is not on ziglang.org; fetch it from the
       # hexops community mirror (see README, "Getting the pinned Zig").
       - name: Install Zig
