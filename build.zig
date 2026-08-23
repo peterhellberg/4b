@@ -215,10 +215,10 @@ fn addRaylib(
     mod.addCMacro("_GNU_SOURCE", "");
     mod.addCMacro("GL_SILENCE_DEPRECATION", "199309L");
     mod.addCMacro("SUPPORT_MODULE_RSHAPES", "1");
-    mod.addCMacro("SUPPORT_MODULE_RTEXTURES", "1");
-    mod.addCMacro("SUPPORT_MODULE_RTEXT", "1");
-    mod.addCMacro("SUPPORT_MODULE_RMODELS", "1");
-    mod.addCMacro("SUPPORT_MODULE_RAUDIO", "1");
+    mod.addCMacro("SUPPORT_MODULE_RTEXTURES", "0");
+    mod.addCMacro("SUPPORT_MODULE_RTEXT", "0");
+    mod.addCMacro("SUPPORT_MODULE_RMODELS", "0");
+    mod.addCMacro("SUPPORT_MODULE_RAUDIO", "0");
     mod.addCMacro("PLATFORM_DESKTOP_GLFW", "");
     mod.addCMacro("GRAPHICS_API_OPENGL_33", "");
 
@@ -247,10 +247,6 @@ fn addRaylib(
         .files = &.{
             "rcore.c",
             "rshapes.c",
-            "rtextures.c",
-            "rtext.c",
-            "rmodels.c",
-            "raudio.c",
         },
         .flags = &.{"-std=c99"},
     });
