@@ -242,23 +242,31 @@ int main(int argc, char **argv) {
   }
 
   if (help || !rom_path) {
-    fprintf(stderr, "usage: 4b [flags] <rom.4b | source.4a | source.4c>\n");
+    fprintf(stderr, "Usage: 4b [options] <rom.4b | source.4a | source.4c>\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "Options:\n");
     fprintf(stderr,
-            "  -d, --debug N     run N instructions headless, dump state\n");
+            "  -d, --debug N       run N instructions headless, dump state\n");
     fprintf(stderr,
-            "  -B, --buttons M   held-button mask for the debug run\n");
-    fprintf(stderr, "  -s, --scale N       pixel scale (default %d)\n",
+            "  -B, --buttons M     held-button mask for the debug run\n");
+    fprintf(stderr,
+            "  -t, --trace         print pc/acc/x/y before every tick (with -d)\n");
+    fprintf(stderr,
+            "  -s, --scale N       window scale (default %d)\n",
             DEFAULT_SCALE);
     fprintf(stderr,
-            "  -n, --speed  N      instructions per frame (default %d)\n",
+            "  -n, --speed N       instructions per frame (default %d)\n",
             DEFAULT_SPEED);
     fprintf(stderr, "  -p, --palette NAME  use a named palette\n");
-    fprintf(stderr, "  -f, --fg  COLOR     foreground color as R,G,B or hex "
-                    "(default d3c9a1)\n");
-    fprintf(stderr, "  -b, --bg  COLOR     background color as R,G,B or hex "
-                    "(default 323c39)\n");
-    fprintf(stderr, "\nA .4a source file is assembled and a .4c source file is"
-                    " compiled at startup.\n");
+    fprintf(stderr,
+            "  -f, --fg COLOR      foreground color as R,G,B or hex "
+            "(default d3c9a1)\n");
+    fprintf(stderr,
+            "  -b, --bg COLOR      background color as R,G,B or hex "
+            "(default 323c39)\n");
+    fprintf(stderr, "  -h, --help          print usage and exit\n");
+    fprintf(stderr, "\nA .4a source file is assembled and a .4c source file"
+                    " is compiled at startup.\n");
 
     return help ? 0 : 1;
   }
@@ -324,6 +332,12 @@ int main(int argc, char **argv) {
 
       return 1;
     }
+  }
+
+  if (trace && debug_steps < 0) {
+    fprintf(stderr, "4b: -t/--trace requires -d/--debug N\n");
+
+    return 1;
   }
 
   VM vm;
