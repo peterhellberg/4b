@@ -39,7 +39,7 @@ $ zig build examples
 Then run one in the box:
 
 ```console
-$ zig build run -- examples/bounce.4b
+$ zig build run -- examples/diag.4b
 ```
 
 A window opens showing a diagonal line wrapping around the screen. Hold an
@@ -225,19 +225,19 @@ The window title shows the ROM name.
 | `examples/hello.4a`   | simplest possible program: an empty halt loop |
 | `examples/line.4a`    | horizontal line across the middle             |
 | `examples/fill.4a`    | fills the screen                              |
-| `examples/bounce.4a`  | diagonal line moving down-right, wrapping     |
+| `examples/diag.4a`  | diagonal line moving down-right, wrapping     |
 | `examples/move.4a`    | steer a single pixel with the arrow keys      |
 | `examples/dpad.4a`    | one blinking pixel per held direction button  |
 
-Every program above except `hello` also exists as 4C source
-(`examples/*.4c`) — same behavior, compiled by `4c`.
+Every program above also exists as 4C source (`examples/*.4c`)
+— same behavior, compiled by `4c`.
 
 Three ways to run one:
 
 ```console
-zig-out/bin/4a examples/bounce.4a && zig-out/bin/4b examples/bounce.4b
-zig-out/bin/4b examples/bounce.4a        # the box compiles/assembles it at startup
-zig build examples && zig build run -- examples/bounce.4b
+zig-out/bin/4a examples/diag.4a && zig-out/bin/4b examples/diag.4b
+zig-out/bin/4b examples/diag.4a        # the box compiles/assembles it at startup
+zig build examples && zig build run -- examples/diag.4b
 ```
 
 ## How the pieces fit together

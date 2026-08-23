@@ -384,7 +384,7 @@ All run by `zig build test`:
 5. **VM behavior tests**: run compiled goldens under `vm.zig` and assert
    screen/register state — including boot-walk soundness (no PC restarts:
    after warm-up ticks every referenced slot is non-zero) and steady-state
-   behavior (the bounce pixel toggles, `move` responds to a synthetic
+   behavior (the diag pixel toggles, `move` responds to a synthetic
    `buttons` value).
 
 End-to-end sanity checks (manual): `zig-out/bin/4b -d N [-B mask]`

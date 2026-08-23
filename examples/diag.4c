@@ -1,4 +1,4 @@
-// bounce.4c - line moving diagonally, wrapping at edges
+// diag.4c - line moving diagonally, wrapping at edges
 
 u4 x = 0;   // start in the top-left corner
 u4 y = 0;

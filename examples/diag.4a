@@ -1,4 +1,4 @@
-; bounce.4a     ; line moving diagonally, wrapping at edges
+; diag.4a     ; line moving diagonally, wrapping at edges
 
 lda #0
 sta r1          ; x = 0
