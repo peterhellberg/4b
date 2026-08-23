@@ -16,7 +16,7 @@ Assemble with `4a` · Run with `4b` · Compile with `4c`
 > [!NOTE]
 > 4B is based on the 4BoD specification, but this is not the official 4BoD
 > project — it is an independent reimplementation. 4BoD (4 Bits of DOOM) was
-> created by [puarsliburf games](https://puarsliburf.itch.io/) for the 2017
+> created by [puarsliburf games](https://puarsliburf.itch.io/4bod-fantaly-console) for the 2017
 > FC Dev jam; see [`docs/4BoD.md`](docs/4BoD.md) for the original
 > description.
 
