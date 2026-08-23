@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Test (Zig ${{ env.ZIG_VERSION }})
+    runs-on: ubuntu-latest
+    env:
+      ZIG_VERSION: 0.17.0-dev.387+31f157d80
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Zig
+        id: cache-zig
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/zig
+          key: zig-${{ env.ZIG_VERSION }}-linux-x86_64
+
+      # The pinned version is not on ziglang.org; fetch it from the
+      # hexops community mirror (see README, "Getting the pinned Zig").
+      - name: Install Zig
+        if: steps.cache-zig.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$RUNNER_TEMP/zig"
+          curl -fsSL \
+            "https://pkg.hexops.org/zig/zig-x86_64-linux-${ZIG_VERSION}.tar.xz" \
+            | tar -xJ --strip-components=1 -C "$RUNNER_TEMP/zig"
+
+      - name: Add Zig to PATH
+        run: echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
+
+      - name: Run tests
+        run: zig build test --summary all
+
+      # Smoke check: assemble/compile every example through the freshly
+      # built toolchain (no raylib or windowing needed).
+      - name: Build examples
+        run: zig build examples
