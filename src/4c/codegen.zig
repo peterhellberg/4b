@@ -530,20 +530,25 @@ pub const Codegen = struct {
     }
 
     /// regs[target] ±= regs[amount] by mutating the target in place:
-    /// zero-guarded count-up loop with the counter in scratch and a
-    /// bottom-tested exit when counter == amount.
+    /// regs[target] ±= regs[amount] as a test-first counter loop: one
+    /// increment per pass while the counter is below the amount, so a zero
+    /// amount applies nothing and the loop always terminates by
+    /// fall-through - sound in every phase, no guards needed.
+    /// regs[target] ±= regs[amount] as a test-first counter loop with raw
+    /// forward skip-jumps: the loop is bounded purely by the counter (a
+    /// zero amount skips it entirely), so it is sound in every phase with
+    /// no phase machinery whatsoever.
     fn mutateLoop(self: *Codegen, target: u4, amount_reg: u8, mode: sema.ArithOp, line: u32, col: u32) Error!void {
         const areg: u4 = @intCast(amount_reg);
 
-        _ = try self.w(.lda_imm, 0, 0);
-        _ = try self.w(.ifgt, areg, 0);
-
-        var exit_patch: usize = undefined;
-
-        try self.gatedJmp(&exit_patch);
+        const skip = try self.flag(line, col);
 
         _ = try self.w(.lda_imm, 0, 0);
-        _ = try self.w(.sta, SCRATCH, 0);
+        _ = try self.w(.ifeq, areg, 0);
+
+        const over = try self.w(.jmp, 0, 0);
+
+        self.patchJmp(over, @intCast(skip));
 
         const top = try self.flag(line, col);
 
@@ -555,63 +560,47 @@ pub const Codegen = struct {
             while (i < 14) : (i += 1) _ = try self.w(.inc, 0, 0);
         }
 
-
         _ = try self.w(.sta, target, 0);
 
         _ = try self.w(.lda_mem, SCRATCH, 0);
         _ = try self.w(.inc, 0, 0);
         _ = try self.w(.sta, SCRATCH, 0);
-        _ = try self.w(.ifeq, areg, 0);
 
-        // Backedge: bounded by the counter below, safe to leave ungated
-        // (firing during the boot walk just applies the mutation once).
-        const back_idx = try self.w(.jmp, 0, 0);
+        const back = try self.w(.jmp, 0, 0);
 
-        self.patchJmp(back_idx, top);
-
-        const exit = try self.flag(line, col);
-
-        self.patchJmp(exit_patch, exit);
+        self.patchJmp(back, top);
     }
 
-    /// regs[target] <<= / >>= regs[dist] by shifting the target in place,
-    /// same skeleton as mutateLoop but each pass shifts once.
+    /// regs[target] <<= / >>= regs[dist], same counter-loop skeleton as
+    /// mutateLoop but each pass shifts once.
     fn shiftMutateLoop(self: *Codegen, target: u4, dist_reg: u8, left: bool, line: u32, col: u32) Error!void {
         const areg: u4 = @intCast(dist_reg);
         const op: isa.Op = if (left) .shl else .shr;
 
-        _ = try self.w(.lda_imm, 0, 0);
-        _ = try self.w(.ifgt, areg, 0);
-
-        var exit_patch: usize = undefined;
-
-        try self.gatedJmp(&exit_patch);
+        const skip = try self.flag(line, col);
 
         _ = try self.w(.lda_imm, 0, 0);
-        _ = try self.w(.sta, SCRATCH, 0);
+        _ = try self.w(.ifeq, areg, 0);
+
+        const over = try self.w(.jmp, 0, 0);
+
+        self.patchJmp(over, @intCast(skip));
 
         const top = try self.flag(line, col);
 
         _ = try self.w(.lda_mem, target, 0);
         _ = try self.w(op, 0, 0);
-
-
         _ = try self.w(.sta, target, 0);
 
         _ = try self.w(.lda_mem, SCRATCH, 0);
         _ = try self.w(.inc, 0, 0);
         _ = try self.w(.sta, SCRATCH, 0);
-        _ = try self.w(.ifeq, areg, 0);
+        _ = try self.w(.lda_mem, areg, 0);
+        _ = try self.w(.ifgt, SCRATCH, 0);
 
-        // Backedge: bounded by the counter below, safe to leave ungated
-        // (firing during the boot walk just applies the mutation once).
-        const back_idx = try self.w(.jmp, 0, 0);
+        const back = try self.w(.jmp, 0, 0);
 
-        self.patchJmp(back_idx, top);
-
-        const exit = try self.flag(line, col);
-
-        self.patchJmp(exit_patch, exit);
+        self.patchJmp(back, top);
     }
 
     fn voidCall(self: *Codegen, vc: sema.VoidCall, line: u32, col: u32) Error!void {

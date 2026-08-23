@@ -123,6 +123,12 @@ Three restrictions keep codegen within the machine's means (see §7):
 
 ### 4.3 Conditions
 
+> [!IMPORTANT]
+> Conditions must compare against the literal `0` — e.g. write
+> `if (t != 0)` rather than `if (a != b)`. Materialize other comparisons
+> through a temp variable first: `t = a; t -= b;` then test `t != 0`.
+> This keeps the compiled phase guards sound on the 4B machine.
+
 ```ebnf
 cond       := condb
 condb      := conda { "||" conda }
@@ -322,7 +328,7 @@ plus the keywords from §3. None may be declared as a variable or const.
 ### 9.1 Diagonal line
 
 ```c
-// bounce.4c     ; line moving diagonally, wrapping at edges
+// diag.4c     ; line moving diagonally, wrapping at edges
 u4 x = 0;
 u4 y = 0;
 

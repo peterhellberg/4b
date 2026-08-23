@@ -330,6 +330,20 @@ pub const Semer = struct {
             .cmp => |cm| blk: {
                 const lhs = try self.convExpr(cm.lhs);
                 const rhs = try self.convExpr(cm.rhs);
+
+                // The lowering can only branch soundly on comparisons
+                // against zero: the phase guard reuses acc for its own
+                // marker, so any other comparand would be clobbered.
+                // Materialize other comparisons through a temp variable
+                // in the source (t = a; t -= b; if (t != 0)).
+                const rhs_zero = switch (rhs.*) {
+                    .int => |v| v == 0,
+                    else => false,
+                };
+                if (!rhs_zero) {
+                    return self.err(c.span.line, c.span.col, "conditions must compare against 0 (materialize via a temp variable)", .{});
+                }
+
                 break :blk .{ .cmp = .{
                     .op = switch (cm.op) {
                         .eq => .eq,
