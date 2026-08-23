@@ -9,14 +9,14 @@ const Options = struct {
     emit_asm: ?[]const u8,
 };
 
-pub fn main(args: std.process.Init) u8 {
+pub fn main(args: std.process.Init) !u8 {
     var opts = Options{
         .input = null,
         .output = null,
         .emit_asm = null,
     };
 
-    var it = args.minimal.args.iterate();
+    var it = try args.minimal.args.iterateAllocator(args.arena.allocator());
     _ = it.next();
 
     while (it.next()) |arg| {
