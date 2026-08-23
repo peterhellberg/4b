@@ -135,8 +135,13 @@ static bool ends_with(const char *s, const char *suffix) {
 /* Headless debugging: run N instructions with a fixed button mask, then
  * dump the VM state to stdout. */
 static void dump_vm(const VM *vm, long steps, unsigned buttons) {
-  printf("after %ld instruction%s (buttons=0x%X)\n", steps,
+  printf("after %ld instruction%s (buttons=0x%X = 0b", steps,
           steps == 1 ? "" : "s", buttons);
+
+  for (int bit = 3; bit >= 0; bit--)
+    printf("%u", (buttons >> bit) & 1);
+
+  printf(")\n");
   printf("pc=%u acc=%u\n", vm->pc, vm->acc);
 
   for (int i = 0; i < 4; i++) {
@@ -147,6 +152,7 @@ static void dump_vm(const VM *vm, long steps, unsigned buttons) {
     printf("\n");
   }
 
+  printf("\n");
   printf("flags:");
   int any_flag = 0;
 
@@ -160,14 +166,22 @@ static void dump_vm(const VM *vm, long steps, unsigned buttons) {
   if (!any_flag)
     printf(" (none)");
 
-  printf("\n");
+  printf("\n\n");
 
   printf("screen:\n");
+  int lit = 0;
+
   for (int y = 0; y < SCREEN_H; y++) {
-    for (int x = 0; x < SCREEN_W; x++)
-      printf("%c", vm->screen[y * SCREEN_W + x] ? '#' : '.');
+    for (int x = 0; x < SCREEN_W; x++) {
+      int on = vm->screen[y * SCREEN_W + x] != 0;
+      lit += on;
+      printf("%c", on ? '#' : '.');
+    }
     printf("\n");
   }
+
+  printf("\n");
+  printf("lit=%d/%d\n", lit, SCREEN_W * SCREEN_H);
 }
 
 static void trace_tick(const VM *vm, long n) {
@@ -197,10 +211,20 @@ int main(int argc, char **argv) {
       speed = atoi(argv[++i]);
     else if ((strcmp(argv[i], "-d") == 0 ||
               strcmp(argv[i], "--debug") == 0)) {
-      /* Optional step count; bare -d dumps immediately. */
-      debug_steps = 0;
-      if (i + 1 < argc && argv[i + 1][0] != '-') {
-        debug_steps = atol(argv[++i]);
+      if (i + 1 >= argc) {
+        fprintf(stderr, "4b: -d/--debug requires a step count\n");
+
+        return 1;
+      }
+
+      char *end = NULL;
+
+      debug_steps = strtol(argv[++i], &end, 10);
+
+      if (end == argv[i] || *end != '\0' || debug_steps < 0) {
+        fprintf(stderr, "4b: invalid step count: %s\n", argv[i]);
+
+        return 1;
       }
     } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--trace") == 0) {
       trace = 1;
@@ -256,7 +280,7 @@ int main(int argc, char **argv) {
     fprintf(stderr, "\n");
     fprintf(stderr, "Options:\n");
     fprintf(stderr,
-            "  -d, --debug N       run N instructions headless, dump state\n");
+            "  -d, --debug N       run N instructions headless, then dump state\n");
     fprintf(stderr,
             "  -B, --buttons M     held-button mask for the debug run\n");
     fprintf(stderr,
