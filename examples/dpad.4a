@@ -1,4 +1,4 @@
-; dpad.4a - one blinking pixel per held direction button
+; dpad.4a - one lit pixel per held direction button
 
                 ; The four pixels form an inverted T:
                 ;
@@ -20,6 +20,7 @@
   sta r6        ; zero constant
 
 @loop:
+  cls           ; clear between frames
   read          ; acc = button bits
   sta r5        ; save the raw bits
 

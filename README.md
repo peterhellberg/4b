@@ -227,7 +227,7 @@ The window title shows the ROM name.
 | `examples/fill.4a`    | fills the screen                              |
 | `examples/diag.4a`    | diagonal line moving down-right, wrapping     |
 | `examples/move.4a`    | steer a single pixel with the arrow keys      |
-| `examples/dpad.4a`    | one blinking pixel per held direction button  |
+| `examples/dpad.4a`    | one lit pixel per held direction button       |
 
 Every program above also exists as 4C source (`examples/*.4c`)
 — same behavior, compiled by `4c`.

@@ -15,11 +15,12 @@ u4 b;         // raw button bits
 
 fn main() {
   for {
+    cls();
     b = buttons();
 
-    if ((b & LEFT) != 0)  { flip(lx, row); }   // toggling every frame
-    if ((b & RIGHT) != 0) { flip(rx, row); }   // makes held buttons blink
-    if ((b & UP) != 0)    { flip(ux, uy); }    // arranged as an inverted T
+    if ((b & LEFT) != 0)  { flip(lx, row); }   // one frame per press:
+    if ((b & RIGHT) != 0) { flip(rx, row); }   // the pixel shows while
+    if ((b & UP) != 0)    { flip(ux, uy); }    // the button is held
     if ((b & DOWN) != 0)  { flip(dx, row); }
   }
 }
