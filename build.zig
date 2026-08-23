@@ -108,7 +108,7 @@ pub fn build(b: *std.Build) void {
     // ---- run steps ----------------------------------------------------------
     addRunStep(b, assembler, "4a", "Assemble with 4a", "assemble");
     addRunStep(b, compiler, "4c", "Compile with 4c", "compile");
-    addRunStep(b, box, "4b", "Run ROM in the box", "run");
+    addRunStep(b, box, "4b", "Run with 4b", "run");
 
     // ---- tests ----------------------------------------------------------------
     const test_step = b.step("test", "Run unit tests");
