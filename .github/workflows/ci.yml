@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    name: Test (Zig ${{ env.ZIG_VERSION }})
+    name: Test (Zig 0.17.0-dev.387+31f157d80)
     runs-on: ubuntu-latest
     env:
       ZIG_VERSION: 0.17.0-dev.387+31f157d80
