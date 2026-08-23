@@ -10,6 +10,8 @@
 #define SCREEN_H 16
 #define ROM_SIZE 384
 #define DEFAULT_SCALE 32
+#define MIN_SCALE 8
+#define MAX_SCALE 64
 #define DEFAULT_SPEED 8
 
 typedef struct {
@@ -286,7 +288,8 @@ int main(int argc, char **argv) {
     fprintf(stderr,
             "  -t, --trace         print pc/acc/x/y before every tick (with -d)\n");
     fprintf(stderr,
-            "  -s, --scale N       window scale (default %d)\n",
+            "  -s, --scale N       window scale %d-%d (default %d)\n",
+            MIN_SCALE, MAX_SCALE,
             DEFAULT_SCALE);
     fprintf(stderr,
             "  -n, --speed N       instructions per frame (default %d)\n",
@@ -305,11 +308,11 @@ int main(int argc, char **argv) {
     return help ? 0 : 1;
   }
 
-  if (scale < 1)
-    scale = 1;
+  if (scale < MIN_SCALE)
+    scale = MIN_SCALE;
 
-  if (scale > 64)
-    scale = 64;
+  if (scale > MAX_SCALE)
+    scale = MAX_SCALE;
 
   if (speed < 1)
     speed = 1;
