@@ -222,10 +222,10 @@ The window title shows the ROM name.
 
 | Program               | Description                                   |
 | --------------------- | --------------------------------------------- |
-| `examples/hello.4a`   | simplest possible program: an empty halt loop |
+| `examples/halt.4a`    | simplest possible program: an empty halt loop |
 | `examples/line.4a`    | horizontal line across the middle             |
 | `examples/fill.4a`    | fills the screen                              |
-| `examples/diag.4a`  | diagonal line moving down-right, wrapping     |
+| `examples/diag.4a`    | diagonal line moving down-right, wrapping     |
 | `examples/move.4a`    | steer a single pixel with the arrow keys      |
 | `examples/dpad.4a`    | one blinking pixel per held direction button  |
 

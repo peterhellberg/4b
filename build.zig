@@ -131,7 +131,7 @@ pub fn build(b: *std.Build) void {
     // ---- examples ---------------------------------------------------------------
     const examples_step = b.step("examples", "Assemble/compile example ROMs");
 
-    for ([_][]const u8{ "hello", "line", "fill" }) |name| {
+    for ([_][]const u8{ "halt", "line", "fill" }) |name| {
         addExample(b, examples_step, assembler, name, "4a");
     }
 

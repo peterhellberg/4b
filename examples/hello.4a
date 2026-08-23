@@ -1,4 +1,0 @@
-; hello.4a      ; simplest program
-
-@halt:
-jmp @halt
