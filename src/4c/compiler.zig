@@ -237,8 +237,7 @@ test "flip and peek reject two computed args" {
 /// 2000 ticks is deterministic (no epilogue-restore window: the
 /// epilogue only runs once, before the loop latches).
 fn runBranch(cond: []const u8, a: u4, b: u4) ![16]u8 {
-    const src = try std.fmt.allocPrint(std.testing.allocator,
-        "u4 x = 0;\nu4 a = {d};\nu4 b = {d};\nfn main() {{ for {{ if ({s}) {{ x = 7; }} else {{ x = 3; }} }} }}\n", .{ a, b, cond });
+    const src = try std.fmt.allocPrint(std.testing.allocator, "u4 x = 0;\nu4 a = {d};\nu4 b = {d};\nfn main() {{ for {{ if ({s}) {{ x = 7; }} else {{ x = 3; }} }} }}\n", .{ a, b, cond });
     defer std.testing.allocator.free(src);
 
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
