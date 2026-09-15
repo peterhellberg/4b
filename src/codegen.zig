@@ -26,7 +26,7 @@ pub fn generate(alloc: std.mem.Allocator, diag: *dia.Diag, sym: *const symbols.S
                 const b_val = resolveOperand(sym, inst.spec.b, inst.b, diag, inst.line, inst.col);
                 var op = inst.spec.op;
                 if (inst.a) |a| {
-                    if (a == .imm and op == .lda_mem) {
+                    if ((a == .imm or a == .const_ref) and op == .lda_mem) {
                         op = .lda_imm;
                     }
                 }
@@ -56,6 +56,12 @@ pub fn generate(alloc: std.mem.Allocator, diag: *dia.Diag, sym: *const symbols.S
 fn resolveOperand(sym: *const symbols.Symbols, kind: isa.OperandKind, op: ?Operand, diag: *dia.Diag, line: u32, col: u32) u4 {
     if (op == null) return 0;
     const operand = op.?;
+    if (operand == .const_ref) {
+        return sym.consts.get(operand.const_ref) orelse blk: {
+            diag.err(line, col, "undefined const '#{s}'", .{operand.const_ref});
+            break :blk 0;
+        };
+    }
     switch (kind) {
         .none => return 0,
         .reg => return operand.reg,
