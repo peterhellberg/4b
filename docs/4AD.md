@@ -53,10 +53,13 @@ The assembler is also embedded in the `4b` box as a static library
   build.zig
   build.zig.zon
   README.md
-  docs/               # 4BoD.md (machine), 4AL.md (language), 4AD.md (this doc)
-  examples/           # *.4a demo programs; zig build examples emits *.4b
+  docs/               # 4BoD.md (machine), 4AL.md (4a language), 4AD.md (this doc),
+                      # 4CL.md (4c language), 4CD.md (compiler design)
+  examples/           # *.{4a,4c} demo programs; zig build examples emits *.4b
   src/
     4a.zig            # CLI, driver, file I/O
+    4c.zig            # 4c CLI (see docs/4CD.md)
+    4c/               # 4c compiler: lexer, parser, ast, sema, codegen, emit_asm, compiler
     assembler.zig     # pipeline driver: lex -> parse -> pass 1 -> pass 2 -> pack,
                       # plus the C-ABI entry point for the box (§17)
     dia.zig           # errors with line/col and source snippets
@@ -82,10 +85,12 @@ The toolchain is pinned to **`0.17.0-dev.387+31f157d80`**; recorded in
 | ----------------------- | --------------------------------------------------- |
 | (default)               | build `4a`, the 4C compiler `4c`, and box `4b`      |
 | `zig build 4a -- …`     | assemble with `4a`                                  |
+| `zig build assemble -- …` | alias for `4a`                                  |
 | `zig build 4c -- …`     | compile with `4c`                                   |
+| `zig build compile -- …` | alias for `4c`                                   |
 | `zig build 4b -- …`     | run in the `4b` box                                 |
 | `zig build run -- …`    | alias for `4b`                                      |
-| `zig build test`        | six suites: both CLIs, assembler/compiler pipelines, rom packing, VM |
+| `zig build test`        | eight suites: both CLIs, assembler/compiler pipelines, rom packing, diagnostics, ISA table, VM |
 | `zig build examples`    | build every `examples/*.{4a,4c}` to `examples/*.4b` |
 
 The box links against three Zig static libraries built from this repo:
