@@ -240,6 +240,7 @@ fn encode(op: Op, a: u4, b: u4) u16 {
 - `flag @name` / `@name:` → `encode(.flag, slot, 0)`; `jmp @name` →
   `encode(.jmp, slot, 0)`; raw `flag N` / `jmp N` → the explicit slot.
 - `dw V` → emit `V` unchanged.
+- The mnemonic `dec` maps to opcode `0x5` with `a == 1` (decrement) and is handled as a local 4B extension; see `docs/4BoD.md`.
 - Position tracking mirrors pass 1; word indices must agree (an internal
   assertion catches divergence — this is the main invariant of the two passes).
 

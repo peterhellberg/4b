@@ -37,3 +37,5 @@ are lots of reimplementations, programming languages, and games.
    1110 AAAA      - Only perform next action if memory position AAAA is greater than the accumulator
    1111 AAAA      - Only perform next action if memory position AAAA is less than the accumulator
 ```
+
+Note: The decrement instruction (`dec`) is a local 4B extension, not part of the original 4BoD specification. It shares opcode `0101` with `inc` and is encoded with operand `A == 1`.
