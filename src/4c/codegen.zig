@@ -430,12 +430,14 @@ pub const Codegen = struct {
             .if_stmt => |i| try self.ifStmt(i.cond, i.then_stmt, i.else_stmt, s.line, s.col),
             .for_stmt => |f| try self.forStmt(f.body),
             .brk => {
+                if (self.loops.items.len == 0) return self.err(s.line, s.col, "break outside loop", .{});
                 var idx: usize = undefined;
                 try self.phaseJump(&idx);
                 const lctx = &self.loops.items[self.loops.items.len - 1];
                 try lctx.brk_patches.append(self.alloc, idx);
             },
             .cont => {
+                if (self.loops.items.len == 0) return self.err(s.line, s.col, "continue outside loop", .{});
                 var idx: usize = undefined;
                 try self.phaseJump(&idx);
                 const top = self.loops.items[self.loops.items.len - 1].top_slot;

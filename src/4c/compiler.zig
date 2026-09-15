@@ -187,6 +187,21 @@ test "variable add emits bounded counter loop" {
     try std.testing.expect(bi != null and ei != null and ei.? > bi.?);
 }
 
+test "break outside loop is an error" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const alloc = arena.allocator();
+
+    for ([_][]const u8{ "break;", "continue;" }) |kw| {
+        const src = try std.fmt.allocPrint(alloc, "fn main() {{ {s} }}\n", .{kw});
+        var diag = dia.Diag.init(alloc, "t.4c", src);
+        const result = compileWords(alloc, &diag, src);
+        try std.testing.expectError(error.CompileFailed, result);
+        try std.testing.expect(diag.hasErrors());
+    }
+}
+
 test "fourb_compile compiles valid source and reports errors" {
     var out: [384]u8 = undefined;
 
