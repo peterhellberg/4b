@@ -34,6 +34,9 @@ pub const Spec = struct {
     b: OperandKind,
 };
 
+/// One mnemonic per spec; "lda" always parses as .lda_mem and codegen
+/// rewrites it to .lda_imm when the operand is `#imm` (or `#CONST`).
+/// There is deliberately no separate "lda" entry for opcode 0x3.
 pub const specs = [_]Spec{
     .{ .mnemonic = "nop", .op = .nop, .a = .none, .b = .none },
     .{ .mnemonic = "lda", .op = .lda_mem, .a = .reg_or_imm, .b = .none },
@@ -111,4 +114,31 @@ pub const Dw = struct {
 
 pub fn encode(op: Op, a: u4, b: u4) u16 {
     return (@as(u16, @intFromEnum(op)) << 8) | (@as(u16, a) << 4) | @as(u16, b);
+}
+
+test "all 16 opcodes covered exactly once" {
+    var seen: [16]bool = @splat(false);
+    for (specs) |s| {
+        const i: usize = @intFromEnum(s.op);
+        try std.testing.expect(!seen[i]);
+        seen[i] = true;
+    }
+    // Only lda_imm shares its mnemonic; every other opcode has a spec.
+    for (seen, 0..) |s, i| {
+        if (i == @intFromEnum(Op.lda_imm)) continue;
+        try std.testing.expect(s);
+    }
+}
+
+test "lookupSpec is case-insensitive" {
+    try std.testing.expectEqual(Op.lda_mem, lookupSpec("LDA").?.op);
+    try std.testing.expectEqual(Op.peek, lookupSpec("Peek").?.op);
+    try std.testing.expect(lookupSpec("nope") == null);
+}
+
+test "encode vectors" {
+    try std.testing.expectEqual(@as(u16, 0x000), encode(.nop, 0, 0));
+    try std.testing.expectEqual(@as(u16, 0x380), encode(.lda_imm, 8, 0));
+    try std.testing.expectEqual(@as(u16, 0x210), encode(.sta, 1, 0));
+    try std.testing.expectEqual(@as(u16, 0xC0F), encode(.jmp, 0, 0xF));
 }
