@@ -104,7 +104,7 @@ pub const Parser = struct {
     }
 
     fn parseVarDecl(self: *Parser) ParseError!ast.VarDecl {
-        const start = self.expect(.kw_u4) catch unreachable;
+        const start = try self.expect(.kw_u4);
         const name_tok = try self.expect(.ident);
         var init_expr: ?*ast.Expr = null;
         if (self.peek().kind == .assign) {
@@ -116,7 +116,7 @@ pub const Parser = struct {
     }
 
     fn parseConstDecl(self: *Parser) ParseError!ast.ConstDecl {
-        const start = self.expect(.kw_const) catch unreachable;
+        const start = try self.expect(.kw_const);
         const name_tok = try self.expect(.ident);
         _ = try self.expect(.assign);
         const value_expr = try self.parseValue();
@@ -355,7 +355,9 @@ pub const Parser = struct {
                         ok = true;
                     }
                 }
-            } else |_| {}
+            } else |e| {
+                if (e == error.OutOfMemory) return e;
+            }
 
             if (ok) return inner.?;
 

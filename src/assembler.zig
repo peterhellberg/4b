@@ -12,23 +12,27 @@ pub const Image = rom.Image;
 pub const AssembleError = error{ AssembleFailed, OutOfMemory };
 
 pub fn assemble(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) AssembleError!Image {
-    const tokens = lexer.lex(alloc, diag, src) catch {
-        return error.AssembleFailed;
+    const tokens = lexer.lex(alloc, diag, src) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.LexError => return error.AssembleFailed,
     };
     if (diag.hasErrors()) return error.AssembleFailed;
 
-    const items = parser.parse(alloc, diag, tokens.items) catch {
-        return error.AssembleFailed;
+    const items = parser.parse(alloc, diag, tokens.items) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.ParseError => return error.AssembleFailed,
     };
     if (diag.hasErrors()) return error.AssembleFailed;
 
-    var sym = symbols.analyze(alloc, diag, items.items) catch {
-        return error.AssembleFailed;
+    var sym = symbols.analyze(alloc, diag, items.items) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.AnalyzeError => return error.AssembleFailed,
     };
     if (diag.hasErrors()) return error.AssembleFailed;
 
-    const words = codegen.generate(alloc, diag, &sym, items.items) catch {
-        return error.AssembleFailed;
+    const words = codegen.generate(alloc, diag, &sym, items.items) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.CodegenError => return error.AssembleFailed,
     };
     if (diag.hasErrors()) return error.AssembleFailed;
 
