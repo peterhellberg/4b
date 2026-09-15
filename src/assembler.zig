@@ -282,6 +282,25 @@ test "const substitution" {
     try assembleExpectError("lda #NOPE\n", "undefined const");
 }
 
+test "names are case-insensitive" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const alloc = arena.allocator();
+    const src = "@Foo:\nlda #n\njmp @fOO\nconst N = 8\n";
+
+    var diag = dia.Diag.init(alloc, "<test>", src);
+    const image = try assemble(alloc, &diag, src);
+    try std.testing.expectEqual(0, diag.errors.items.len);
+
+    var expected: Image = undefined;
+    rom.pack(&[_]u16{ 0xB00, 0x380, 0xC00 }, &expected);
+    try std.testing.expectEqualSlices(u8, &expected, &image);
+
+    try assembleExpectError("@Foo:\n@FOO:\n", "already defined");
+    try assembleExpectError("const N = 1\nconst n = 2\n", "duplicate");
+}
+
 test "negative: program too long" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

@@ -6,15 +6,34 @@ const Item = isa.Item;
 
 const reserved_directives = [_][]const u8{ "const", "org", "dw" };
 
+/// Hash context matching docs/4AL.md §3: all identifiers are
+/// case-insensitive, so `@Foo` and `@foo` are the same label.
+const CiContext = struct {
+    pub fn hash(_: @This(), s: []const u8) u64 {
+        var h: u64 = 1469598103934665603;
+        for (s) |c| {
+            h ^= std.ascii.toLower(c);
+            h *%= 1099511628211;
+        }
+        return h;
+    }
+
+    pub fn eql(_: @This(), a: []const u8, b: []const u8) bool {
+        return std.ascii.eqlIgnoreCase(a, b);
+    }
+};
+
+pub const NameMap = std.HashMap([]const u8, u4, CiContext, std.hash_map.default_max_load_percentage);
+
 pub const Symbols = struct {
-    consts: std.StringHashMap(u4),
-    labels: std.StringHashMap(u4),
+    consts: NameMap,
+    labels: NameMap,
     next_slot: u8 = 0,
 
     pub fn init(alloc: std.mem.Allocator) Symbols {
         return .{
-            .consts = std.StringHashMap(u4).init(alloc),
-            .labels = std.StringHashMap(u4).init(alloc),
+            .consts = NameMap.init(alloc),
+            .labels = NameMap.init(alloc),
         };
     }
 };
