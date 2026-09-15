@@ -1,6 +1,6 @@
 # 4A Assembler Design
 
-*Version 0.2. Companion to `docs/4AL.md`.*
+Companion to `docs/4AL.md`.
 
 `4a` assembles a `4A` source file (`.4a`) into a raw 384-byte program image
 (`.4b`) that the 4B box can run. Implementation language: **Zig

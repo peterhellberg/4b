@@ -1,6 +1,6 @@
 # 4C Language Specification
 
-*Version 0.1 (draft). Companion to `docs/4BoD.md` and `docs/4AL.md`.*
+Companion to `docs/4BoD.md` and `docs/4AL.md`.
 
 4C is a small, C-flavored programming language for the 4B box.
 A `.4c` source file is compiled by the 4C compiler (`4c`) into the same
