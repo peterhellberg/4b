@@ -30,7 +30,8 @@ fn coords(vm: *const VM, a: u4, b: u4) struct { x: usize, y: usize } {
     return .{ .x = vm.regs[a] & 0x0F, .y = vm.regs[b] & 0x0F };
 }
 
-pub export fn fourb_vm_tick(vm: *VM) void {    const word = vm.program[vm.pc];
+pub export fn fourb_vm_tick(vm: *VM) void {
+    const word = vm.program[vm.pc];
     const op: u4 = @intCast((word >> 8) & 0xF);
     const a: u4 = @intCast((word >> 4) & 0xF);
     const b: u4 = @intCast(word & 0xF);
