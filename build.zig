@@ -13,11 +13,18 @@ pub fn build(b: *std.Build) void {
     const dia_mod = zigModule(b, "src/dia.zig", target, optimize);
     const isa_mod = zigModule(b, "src/isa.zig", target, optimize);
     const rom_mod = zigModule(b, "src/rom.zig", target, optimize);
+    const vm_mod = zigModule(b, "src/vm.zig", target, optimize);
 
     const shared_imports = [_]std.Build.Module.Import{
         .{ .name = "dia", .module = dia_mod },
         .{ .name = "isa", .module = isa_mod },
         .{ .name = "rom", .module = rom_mod },
+    };
+
+    // The 4c test suite emulates compiled programs on the VM, so the
+    // compiler module also sees the shared vm module instance.
+    const com_imports = shared_imports ++ [_]std.Build.Module.Import{
+        .{ .name = "vm", .module = vm_mod },
     };
 
     const asm_mod = b.createModule(.{
@@ -31,7 +38,7 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/4c/compiler.zig"),
         .target = target,
         .optimize = optimize,
-        .imports = &shared_imports,
+        .imports = &com_imports,
     });
 
     // ---- 4a assembler -----------------------------------------------------------
@@ -52,7 +59,7 @@ pub fn build(b: *std.Build) void {
     // ---- 4b box (C + Zig VM/assembler/compiler + C raylib) ------------------
     const vm_lib = b.addLibrary(.{
         .name = "vm",
-        .root_module = zigModule(b, "src/vm.zig", target, optimize),
+        .root_module = vm_mod,
     });
 
     const asm_lib = b.addLibrary(.{

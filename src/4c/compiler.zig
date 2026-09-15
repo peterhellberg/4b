@@ -12,6 +12,8 @@ pub const emit_asm = @import("emit_asm.zig");
 
 pub const Image = rom.Image;
 
+const vm_mod = @import("vm");
+
 pub const CompileError = error{ CompileFailed, OutOfMemory };
 
 /// Compile 4C source to program words plus slot metadata.
@@ -226,6 +228,72 @@ test "flip and peek reject two computed args" {
     var diag = dia.Diag.init(alloc, "t.4c", ok);
     _ = try compileWords(alloc, &diag, ok);
     try std.testing.expectEqual(0, diag.errors.items.len);
+}
+
+/// Compile `for { if (cond) { x = 7; } else { x = 3; } }` over fixed
+/// inputs, run it through the real boot walk, and return the registers.
+/// After the boot walk the loop body re-executes forever with latched
+/// phase, rewriting the same answer every iteration — so sampling after
+/// 2000 ticks is deterministic (no epilogue-restore window: the
+/// epilogue only runs once, before the loop latches).
+fn runBranch(cond: []const u8, a: u4, b: u4) ![16]u8 {
+    const src = try std.fmt.allocPrint(std.testing.allocator,
+        "u4 x = 0;\nu4 a = {d};\nu4 b = {d};\nfn main() {{ for {{ if ({s}) {{ x = 7; }} else {{ x = 3; }} }} }}\n", .{ a, b, cond });
+    defer std.testing.allocator.free(src);
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const alloc = arena.allocator();
+
+    var diag = dia.Diag.init(alloc, "t.4c", src);
+    const out = try compileWords(alloc, &diag, src);
+    try std.testing.expectEqual(0, diag.errors.items.len);
+
+    var vm: vm_mod.VM = undefined;
+    vm_mod.fourb_vm_init(&vm);
+    for (out.words, 0..) |w, i| vm.program[i] = w;
+    var i: usize = 0;
+    while (i < 2000) : (i += 1) vm_mod.fourb_vm_tick(&vm);
+    return vm.regs;
+}
+
+fn expectBranch(cond: []const u8, a: u4, b: u4, x: u4) !void {
+    const regs = try runBranch(cond, a, b);
+    if (regs[0] != x) {
+        std.debug.print("BRANCH: cond={s} a={d} b={d} want x={d} got {d}\n", .{ cond, a, b, x, regs[0] });
+    }
+    try std.testing.expectEqual(x, regs[0]);
+}
+
+test "branch conditions lower correctly" {
+    try expectBranch("a == 0", 0, 0, 7);
+    try expectBranch("a == 0", 3, 0, 3);
+    try expectBranch("a != 0", 3, 0, 7);
+    try expectBranch("a != 0", 0, 0, 3);
+    try expectBranch("a > 0", 3, 0, 7);
+    try expectBranch("a > 0", 0, 0, 3);
+    try expectBranch("a >= 0", 0, 0, 7);
+    try expectBranch("a < 0", 5, 0, 3);
+    try expectBranch("a <= 0", 0, 0, 7);
+    try expectBranch("a <= 0", 5, 0, 3);
+    try expectBranch("a", 4, 0, 7);
+    try expectBranch("a", 0, 0, 3);
+    try expectBranch("!(a == 0)", 3, 0, 7);
+    try expectBranch("!(a == 0)", 0, 0, 3);
+    try expectBranch("a != 0 && b != 0", 2, 3, 7);
+    try expectBranch("a != 0 && b != 0", 0, 3, 3);
+    try expectBranch("a != 0 && b != 0", 2, 0, 3);
+    try expectBranch("a == 0 || b == 0", 0, 5, 7);
+    try expectBranch("a == 0 || b == 0", 5, 0, 7);
+    try expectBranch("a == 0 || b == 0", 5, 6, 3);
+    try expectBranch("!(a != 0 || b != 0)", 0, 0, 7);
+    try expectBranch("!(a != 0 || b != 0)", 1, 0, 3);
+    try expectBranch("!(a != 0 || b != 0)", 0, 1, 3);
+    try expectBranch("!(a != 0 || b != 0)", 1, 1, 3);
+    try expectBranch("!(a != 0 && b != 0)", 0, 0, 7);
+    try expectBranch("!(a != 0 && b != 0)", 0, 5, 7);
+    try expectBranch("!(a != 0 && b != 0)", 1, 1, 3);
 }
 
 test "fourb_compile compiles valid source and reports errors" {
