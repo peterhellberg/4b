@@ -234,7 +234,12 @@ pub const Semer = struct {
                 .up => .up,
                 .down => .down,
             } },
-            .peek => |p| Expr{ .peek = .{ .x = try self.convExpr(p.x), .y = try self.convExpr(p.y) } },
+            .peek => |p| blk: {
+                const x = try self.convExpr(p.x);
+                const y = try self.convExpr(p.y);
+                try self.checkAtMostOneComputed(x, y, e.span.line, e.span.col, "peek coordinate");
+                break :blk Expr{ .peek = .{ .x = x, .y = y } };
+            },
             .arith => |a| blk: {
                 const l = try self.convExpr(a.lhs);
                 const r = try self.convExpr(a.rhs);
@@ -317,10 +322,11 @@ pub const Semer = struct {
         return node;
     }
 
-    fn checkFlipArg(self: *Semer, e: *Expr, line: u32, col: u32) Error!void {
-        switch (e.*) {
-            .int, .variable => {},
-            else => return self.err(line, col, "at most one flip argument may be a computed value", .{}),
+    fn checkAtMostOneComputed(self: *Semer, x: *Expr, y: *Expr, line: u32, col: u32, what: []const u8) Error!void {
+        const xc = x.* != .int and x.* != .variable;
+        const yc = y.* != .int and y.* != .variable;
+        if (xc and yc) {
+            return self.err(line, col, "at most one {s} may be a computed value", .{what});
         }
     }
 
@@ -409,8 +415,7 @@ pub const Semer = struct {
                     .flip => |f| {
                         const x = try self.convExpr(f.x);
                         const y = try self.convExpr(f.y);
-                        try self.checkFlipArg(x, f.x.span.line, f.x.span.col);
-                        try self.checkFlipArg(y, f.y.span.line, f.y.span.col);
+                        try self.checkAtMostOneComputed(x, y, s.span.line, s.span.col, "flip argument");
                         break :blk .{ .voidcall = .{ .flip = .{ .x = x, .y = y } } };
                     },
                 }
