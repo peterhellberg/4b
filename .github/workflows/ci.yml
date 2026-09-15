@@ -43,6 +43,9 @@ jobs:
       - name: Add Zig to PATH
         run: echo "$RUNNER_TEMP/zig" >> "$GITHUB_PATH"
 
+      - name: Check formatting
+        run: zig fmt --check src build.zig
+
       - name: Run tests
         run: zig build test --summary all
 
@@ -50,3 +53,9 @@ jobs:
       # built toolchain (no raylib or windowing needed).
       - name: Build examples
         run: zig build examples
+
+      # The test and examples steps only touch the 4a/4c tools; build
+      # everything (including the 4b box with its C and raylib sources)
+      # so box/C-ABI drift fails here instead of only locally.
+      - name: Build all
+        run: zig build --summary all
