@@ -57,8 +57,7 @@ pub fn main(args: std.process.Init) !u8 {
     var diag = dia.Diag.init(alloc, input_path, src);
     defer diag.deinit();
 
-    const image = assembler.assemble(alloc, &diag, src) catch |e| switch (e) {
-        error.AssembleFailed => {
+    const image = assembler.assemble(alloc, &diag, src) catch |e| switch (e) {        error.AssembleFailed => {
             diag.printAll();
             return 1;
         },
@@ -67,11 +66,6 @@ pub fn main(args: std.process.Init) !u8 {
             return 1;
         },
     };
-
-    if (diag.hasErrors()) {
-        diag.printAll();
-        return 1;
-    }
 
     const output_path = opts.output orelse defaultOutput(alloc, input_path) catch {
         std.debug.print("error: out of memory\n", .{});
