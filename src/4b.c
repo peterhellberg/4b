@@ -1,4 +1,5 @@
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,10 +45,17 @@ typedef struct {
   uint8_t regs[16];
   uint8_t acc;
   uint8_t screen[256];
-  uint16_t flags[16];
+  uint8_t flags[16];
   uint8_t pc;
   uint8_t buttons;
 } VM;
+
+_Static_assert(sizeof(VM) == 804, "VM layout drifted from src/vm.zig");
+_Static_assert(offsetof(VM, program) == 0, "VM.program offset");
+_Static_assert(offsetof(VM, regs) == 512, "VM.regs offset");
+_Static_assert(offsetof(VM, screen) == 529, "VM.screen offset");
+_Static_assert(offsetof(VM, flags) == 785, "VM.flags offset");
+_Static_assert(offsetof(VM, pc) == 801, "VM.pc offset");
 
 extern void fourb_vm_init(VM *vm);
 extern void fourb_vm_tick(VM *vm);
@@ -104,7 +112,7 @@ static bool parse_color(const char *s, Color *out) {
   char *end;
   hex = strtoul(p, &end, 16);
 
-  if (end != p && *end == '\0' && hex <= 0xFFFFFF) {
+  if (end != p && *end == '\0' && (size_t)(end - p) == 6 && hex <= 0xFFFFFF) {
     *out = (Color){
         (uint8_t)((hex >> 16) & 0xFF),
         (uint8_t)((hex >> 8) & 0xFF),
@@ -115,9 +123,9 @@ static bool parse_color(const char *s, Color *out) {
     return true;
   }
 
-  int r, g, b;
+  int r, g, b, n = 0;
 
-  if (sscanf(s, "%d,%d,%d", &r, &g, &b) != 3)
+  if (sscanf(s, "%d,%d,%d%n", &r, &g, &b, &n) != 3 || s[n] != '\0')
     return false;
 
   if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255)
@@ -156,18 +164,8 @@ static void dump_vm(const VM *vm, long steps, unsigned buttons) {
 
   printf("\n");
   printf("flags:");
-  int any_flag = 0;
-
-  for (int i = 0; i < 16; i++) {
-    if (vm->flags[i] != 0) {
-      printf(" %d=%u", i, vm->flags[i]);
-      any_flag = 1;
-    }
-  }
-
-  if (!any_flag)
-    printf(" (none)");
-
+  for (int i = 0; i < 16; i++)
+    printf(" %d=%u", i, vm->flags[i]);
   printf("\n\n");
 
   printf("screen:\n");
@@ -187,8 +185,7 @@ static void dump_vm(const VM *vm, long steps, unsigned buttons) {
 }
 
 static void trace_tick(const VM *vm, long n) {
-  printf("%4ld: pc=%3u acc=%u x=%u y=%u\n", n, vm->pc, vm->acc,
-         vm->regs[0] & 0x0F, vm->regs[1] & 0x0F);
+  printf("%4ld: pc=%3u acc=%u\n", n, vm->pc, vm->acc);
 }
 
 int main(int argc, char **argv) {
@@ -233,7 +230,7 @@ int main(int argc, char **argv) {
     } else if ((strcmp(argv[i], "-B") == 0 ||
                 strcmp(argv[i], "--buttons") == 0) &&
                i + 1 < argc)
-      buttons_mask = (unsigned)strtoul(argv[++i], NULL, 0);
+      buttons_mask = (unsigned)strtoul(argv[++i], NULL, 0) & 0xF;
     else if ((strcmp(argv[i], "-p") == 0 ||
               strcmp(argv[i], "--palette") == 0)) {
       if (i + 1 >= argc || argv[i + 1][0] == '-') {
@@ -273,8 +270,16 @@ int main(int argc, char **argv) {
 
         return 1;
       }
-    } else if (argv[i][0] != '-')
+    } else if (argv[i][0] != '-') {
+      if (rom_path) {
+        fprintf(stderr, "4b: multiple input files\n");
+        return 1;
+      }
       rom_path = argv[i];
+    } else {
+      fprintf(stderr, "4b: unknown option: %s\n", argv[i]);
+      return 1;
+    }
   }
 
   if (help || !rom_path) {
@@ -286,7 +291,7 @@ int main(int argc, char **argv) {
     fprintf(stderr,
             "  -B, --buttons M     held-button mask for the debug run\n");
     fprintf(stderr,
-            "  -t, --trace         print pc/acc/x/y before every tick (with -d)\n");
+            "  -t, --trace         print pc/acc before every tick (with -d)\n");
     fprintf(stderr,
             "  -s, --scale N       window scale %d-%d (default %d)\n",
             MIN_SCALE, MAX_SCALE,
@@ -379,7 +384,6 @@ int main(int argc, char **argv) {
 
   VM vm;
 
-  fourb_vm_init(&vm);
   fourb_vm_load_rom(&vm, rom, rom_len);
 
   if (debug_steps >= 0) {

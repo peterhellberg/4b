@@ -160,7 +160,7 @@ Options:
   -b, --bg COLOR      background color as R,G,B or hex (default 323c39)
   -d, --debug N       run N instructions headless, then dump state
   -B, --buttons M     held-button mask for the debug run
-  -t, --trace         print pc/acc/x/y before every tick (with -d)
+  -t, --trace         print pc/acc before every tick (with -d)
 ```
 
 A file ending in `.4a` is treated as source and assembled at startup, a file
