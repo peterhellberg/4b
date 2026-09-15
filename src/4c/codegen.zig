@@ -94,8 +94,7 @@ pub const Codegen = struct {
     /// never depends on leftover expression state. Used for backedges,
     /// break and continue.
     fn phaseJump(self: *Codegen, patch_idx: *usize) Error!void {
-        _ = try self.w(.lda_mem, ZERO, 0);
-        _ = try self.w(.ifgt, PHASE, 0);
+        try self.effectGuard();
 
         patch_idx.* = try self.w(.jmp, 0, 0);
     }
