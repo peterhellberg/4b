@@ -11,7 +11,7 @@ pub const VM = extern struct {
     regs: [REG_COUNT]u8,
     acc: u8,
     screen: [SCREEN_W * SCREEN_H]u8,
-    flags: [FLAG_COUNT]u16,
+    flags: [FLAG_COUNT]u8,
     pc: u8,
     buttons: u8,
 };
@@ -26,8 +26,11 @@ pub export fn fourb_vm_init(vm: *VM) void {
     vm.buttons = 0;
 }
 
-pub export fn fourb_vm_tick(vm: *VM) void {
-    const word = vm.program[vm.pc];
+fn coords(vm: *const VM, a: u4, b: u4) struct { x: usize, y: usize } {
+    return .{ .x = vm.regs[a] & 0x0F, .y = vm.regs[b] & 0x0F };
+}
+
+pub export fn fourb_vm_tick(vm: *VM) void {    const word = vm.program[vm.pc];
     const op: u4 = @intCast((word >> 8) & 0xF);
     const a: u4 = @intCast((word >> 4) & 0xF);
     const b: u4 = @intCast(word & 0xF);
@@ -40,23 +43,23 @@ pub export fn fourb_vm_tick(vm: *VM) void {
         0x2 => vm.regs[a] = vm.acc & 0x0F,
         0x3 => vm.acc = a,
         0x4 => vm.acc = vm.buttons & 0x0F,
-        0x5 => vm.acc = (vm.acc +% 1) & 0x0F,
+        0x5 => vm.acc = (vm.acc + 1) & 0x0F,
         0x6 => @memset(&vm.screen, 0),
         0x7 => vm.acc = (vm.acc << 1) & 0x0F,
         0x8 => vm.acc >>= 1,
         0x9 => {
-            const x: usize = vm.regs[a] & 0x0F;
-            const y: usize = vm.regs[b] & 0x0F;
-            vm.acc = vm.screen[y * SCREEN_W + x];
+            const c = coords(vm, a, b);
+            vm.acc = vm.screen[c.y * SCREEN_W + c.x];
         },
         0xA => {
-            const x: usize = vm.regs[a] & 0x0F;
-            const y: usize = vm.regs[b] & 0x0F;
-            const idx = y * SCREEN_W + x;
+            const c = coords(vm, a, b);
+            const idx = c.y * SCREEN_W + c.x;
             vm.screen[idx] = if (vm.screen[idx] == 0) 1 else 0;
         },
+        // flag stores its own address, so jmp re-executes the flag word
+        // (a loop-to-flag, not a call/return).
         0xB => vm.flags[a] = vm.pc -% 1,
-        0xC => vm.pc = @intCast(vm.flags[a]),
+        0xC => vm.pc = vm.flags[a],
         0xD => {
             if (vm.regs[a] != vm.acc) vm.pc +%= 1;
         },
@@ -75,8 +78,7 @@ pub export fn fourb_vm_load_rom(vm: *VM, rom: [*]const u8, len: usize) void {
     while (i < PROG_SIZE and i * 12 / 8 < len) : (i += 1) {
         const base = i * 12;
         var word: u16 = 0;
-        comptime var k: usize = 0;
-        inline while (k < 12) : (k += 1) {
+        for (0..12) |k| {
             const g = base + k;
             if (g / 8 < len and (rom[g / 8] >> @intCast(g % 8)) & 1 != 0) {
                 word |= @as(u16, 1) << @intCast(k);
@@ -171,7 +173,7 @@ test "vm: flag records own position and jmp returns to it" {
     vm.pc = 13;
 
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u16, 13), vm.flags[1]);
+    try std.testing.expectEqual(@as(u8, 13), vm.flags[1]);
     try std.testing.expectEqual(@as(u8, 14), vm.pc);
 
     fourb_vm_tick(&vm);
@@ -179,7 +181,7 @@ test "vm: flag records own position and jmp returns to it" {
 
     fourb_vm_tick(&vm);
     try std.testing.expectEqual(@as(u8, 14), vm.pc);
-    try std.testing.expectEqual(@as(u16, 13), vm.flags[1]);
+    try std.testing.expectEqual(@as(u8, 13), vm.flags[1]);
 }
 
 fn expectSkip(comptime op: u4, r: u4, acc: u4, executes_next: bool) !void {
@@ -213,7 +215,7 @@ test "vm: pc wraps at 255" {
     vm.program[255] = inst(0xB, 2, 0);
     vm.pc = 255;
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u16, 255), vm.flags[2]);
+    try std.testing.expectEqual(@as(u8, 255), vm.flags[2]);
     try std.testing.expectEqual(@as(u8, 0), vm.pc);
 
     var vm2: VM = undefined;
@@ -251,8 +253,34 @@ test "vm: c abi layout matches 4b.c" {
     try std.testing.expectEqual(@as(usize, 512), @offsetOf(VM, "regs"));
     try std.testing.expectEqual(@as(usize, 528), @offsetOf(VM, "acc"));
     try std.testing.expectEqual(@as(usize, 529), @offsetOf(VM, "screen"));
-    try std.testing.expectEqual(@as(usize, 786), @offsetOf(VM, "flags"));
-    try std.testing.expectEqual(@as(usize, 818), @offsetOf(VM, "pc"));
-    try std.testing.expectEqual(@as(usize, 819), @offsetOf(VM, "buttons"));
-    try std.testing.expectEqual(@as(usize, 820), @sizeOf(VM));
+    try std.testing.expectEqual(@as(usize, 785), @offsetOf(VM, "flags"));
+    try std.testing.expectEqual(@as(usize, 801), @offsetOf(VM, "pc"));
+    try std.testing.expectEqual(@as(usize, 802), @offsetOf(VM, "buttons"));
+    try std.testing.expectEqual(@as(usize, 804), @sizeOf(VM));
+}
+
+test "vm: conditional skip wraps past 255" {
+    var vm: VM = undefined;
+    fourb_vm_init(&vm);
+    // ifeq r9 with r9 != acc skips the word at 0, landing on 1.
+    vm.program[255] = inst(0xD, 9, 0);
+    vm.program[0] = inst(0x3, 7, 0);
+    vm.pc = 255;
+    vm.acc = 5;
+    vm.regs[9] = 4;
+    fourb_vm_tick(&vm);
+    try std.testing.expectEqual(@as(u8, 1), vm.pc);
+}
+
+test "vm: double flip toggles back" {
+    var vm: VM = undefined;
+    fourb_vm_init(&vm);
+    vm.regs[0] = 1;
+    vm.regs[1] = 1;
+    vm.program[0] = inst(0xA, 0, 1);
+    fourb_vm_tick(&vm);
+    try std.testing.expectEqual(@as(u8, 1), vm.screen[1 * SCREEN_W + 1]);
+    vm.pc = 0;
+    fourb_vm_tick(&vm);
+    try std.testing.expectEqual(@as(u8, 0), vm.screen[1 * SCREEN_W + 1]);
 }
