@@ -240,7 +240,7 @@ pub const Codegen = struct {
         };
     }
 
-    /// Emit words that skip the trailing gated jump(s) iff cond holds.
+    /// Emit the test words for a condition, collecting exit jumps.
     /// Every emitted jmp word index lands in `patches` for later fixup.
     /// Contract: `patches` fire iff cond is FALSE (they skip the
     /// then-branch); fall-through means cond holds.
