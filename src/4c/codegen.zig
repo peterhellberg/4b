@@ -530,77 +530,57 @@ pub const Codegen = struct {
     }
 
     /// regs[target] ±= regs[amount] by mutating the target in place:
-    /// regs[target] ±= regs[amount] as a test-first counter loop: one
-    /// increment per pass while the counter is below the amount, so a zero
-    /// amount applies nothing and the loop always terminates by
+    /// a test-first counter loop in SCRATCH, one increment per pass.
+    /// The counter starts at 0 so a zero amount falls straight through;
+    /// each pass bumps the counter and loops back until it reaches the
+    /// amount. Bounded purely by the counter, so it always terminates by
     /// fall-through - sound in every phase, no guards needed.
-    /// regs[target] ±= regs[amount] as a test-first counter loop with raw
-    /// forward skip-jumps: the loop is bounded purely by the counter (a
-    /// zero amount skips it entirely), so it is sound in every phase with
-    /// no phase machinery whatsoever.
     fn mutateLoop(self: *Codegen, target: u4, amount_reg: u8, mode: sema.ArithOp, line: u32, col: u32) Error!void {
-        const areg: u4 = @intCast(amount_reg);
-
-        const skip = try self.flag(line, col);
-
-        _ = try self.w(.lda_imm, 0, 0);
-        _ = try self.w(.ifeq, areg, 0);
-
-        const over = try self.w(.jmp, 0, 0);
-
-        self.patchJmp(over, @intCast(skip));
-
-        const top = try self.flag(line, col);
-
-        _ = try self.w(.lda_mem, target, 0);
-        _ = try self.w(.inc, 0, 0);
-
-        if (mode == .sub) {
-            var i: u4 = 0;
-            while (i < 14) : (i += 1) _ = try self.w(.inc, 0, 0);
-        }
-
-        _ = try self.w(.sta, target, 0);
-
-        _ = try self.w(.lda_mem, SCRATCH, 0);
-        _ = try self.w(.inc, 0, 0);
-        _ = try self.w(.sta, SCRATCH, 0);
-
-        const back = try self.w(.jmp, 0, 0);
-
-        self.patchJmp(back, top);
+        return self.counterLoop(target, amount_reg, if (mode == .add) .add else .sub, line, col);
     }
 
     /// regs[target] <<= / >>= regs[dist], same counter-loop skeleton as
     /// mutateLoop but each pass shifts once.
     fn shiftMutateLoop(self: *Codegen, target: u4, dist_reg: u8, left: bool, line: u32, col: u32) Error!void {
-        const areg: u4 = @intCast(dist_reg);
-        const op: isa.Op = if (left) .shl else .shr;
+        return self.counterLoop(target, dist_reg, if (left) .shl else .shr, line, col);
+    }
 
-        const skip = try self.flag(line, col);
+    const LoopBody = enum { add, sub, shl, shr };
+
+    fn counterLoop(self: *Codegen, target: u4, amount_reg: u8, body: LoopBody, line: u32, col: u32) Error!void {
+        const areg: u4 = @intCast(amount_reg);
 
         _ = try self.w(.lda_imm, 0, 0);
-        _ = try self.w(.ifeq, areg, 0);
-
-        const over = try self.w(.jmp, 0, 0);
-
-        self.patchJmp(over, @intCast(skip));
+        _ = try self.w(.sta, SCRATCH, 0);
 
         const top = try self.flag(line, col);
 
+        _ = try self.w(.lda_mem, areg, 0);
+        _ = try self.w(.ifeq, SCRATCH, 0);
+
+        const out = try self.w(.jmp, 0, 0);
+
         _ = try self.w(.lda_mem, target, 0);
-        _ = try self.w(op, 0, 0);
+        switch (body) {
+            .add => _ = try self.w(.inc, 0, 0),
+            .sub => {
+                var i: u4 = 0;
+                while (i < 15) : (i += 1) _ = try self.w(.inc, 0, 0);
+            },
+            .shl => _ = try self.w(.shl, 0, 0),
+            .shr => _ = try self.w(.shr, 0, 0),
+        }
         _ = try self.w(.sta, target, 0);
 
         _ = try self.w(.lda_mem, SCRATCH, 0);
         _ = try self.w(.inc, 0, 0);
         _ = try self.w(.sta, SCRATCH, 0);
-        _ = try self.w(.lda_mem, areg, 0);
-        _ = try self.w(.ifgt, SCRATCH, 0);
 
         const back = try self.w(.jmp, 0, 0);
-
         self.patchJmp(back, top);
+
+        const end = try self.flag(line, col);
+        self.patchJmp(out, end);
     }
 
     fn voidCall(self: *Codegen, vc: sema.VoidCall, line: u32, col: u32) Error!void {
