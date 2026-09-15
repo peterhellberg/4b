@@ -125,6 +125,7 @@ const buttons_src = @embedFile("test/golden/buttons.4a");
 const forward_src = @embedFile("test/golden/forward.4a");
 const rawflag_src = @embedFile("test/golden/rawflag.4a");
 const orgdw_src = @embedFile("test/golden/orgdw.4a");
+const dec_src = @embedFile("test/golden/dec.4a");
 
 fn padBytes(comptime data: []const u8) Image {
     var img: Image = undefined;
@@ -156,6 +157,10 @@ const rawflag_expected = padBytes(&[_]u8{
 
 const orgdw_expected = padBytes(&[_]u8{
     0x00, 0x00, 0x00, 0xBC, 0x0A, 0x00, 0x00, 0x30, 0x12,
+});
+
+const dec_expected = padBytes(&[_]u8{
+    0x50, 0x03, 0x51, 0x00, 0x02,
 });
 
 fn assembleAndCheck(src: []const u8, expected: *const Image) !void {
@@ -190,6 +195,10 @@ test "golden: raw flag/jmp" {
 
 test "golden: org/dw" {
     try assembleAndCheck(orgdw_src, &orgdw_expected);
+}
+
+test "golden: dec extension" {
+    try assembleAndCheck(dec_src, &dec_expected);
 }
 
 const neg_undefined = "jmp @nope\n";
