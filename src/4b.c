@@ -325,8 +325,8 @@ static int parse_args(int argc, char **argv, Options *opts) {
 }
 
 /* Load a ROM file, or assemble/compile a source file with the embedded
- * toolchain. On success sets *rom/*rom_len/*heap_rom and returns 0
- * (heap_rom is 1 when *rom must be freed by the caller). Prints an
+ * toolchain. On success sets rom, rom_len and heap_rom and returns 0
+ * (heap_rom is 1 when rom must be freed by the caller). Prints an
  * error and returns 1 on failure. */
 static int load_rom(const char *rom_path, uint8_t *assembled,
                     const uint8_t **rom, size_t *rom_len, int *heap_rom) {
