@@ -67,6 +67,7 @@ pub fn main(args: std.process.Init) !u8 {
     };
 
     var diag = dia.Diag.init(alloc, input_path, src);
+    defer diag.deinit();
 
     const out = compiler.compileWords(alloc, &diag, src) catch |e| switch (e) {
         error.CompileFailed => {

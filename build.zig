@@ -117,6 +117,8 @@ pub fn build(b: *std.Build) void {
         assembler.root_module, // CLI + golden/negative assembler tests
         asm_mod, // assembler pipeline tests
         rom_mod, // bit-packing tests
+        dia_mod, // diagnostics tests
+        isa_mod, // ISA table tests
         compiler.root_module, // CLI tests
         com_mod, // compiler pipeline tests
         vm_lib.root_module, // VM opcode tests
