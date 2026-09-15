@@ -1,4 +1,5 @@
 const std = @import("std");
+const isa = @import("isa");
 const lexer = @import("lexer.zig");
 const parser = @import("parser.zig");
 const sema_mod = @import("sema.zig");
@@ -129,6 +130,61 @@ test "compile trivial 4c program" {
     );
 
     _ = image;
+}
+
+test "variable add emits bounded counter loop" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const alloc = arena.allocator();
+
+    var diag = dia.Diag.init(alloc, "t.4c",
+        \\u4 x = 2;
+        \\u4 y = 3;
+        \\fn main() { x += y; halt(); }
+    );
+
+    const out = try compileWords(alloc, &diag,
+        \\u4 x = 2;
+        \\u4 y = 3;
+        \\fn main() { x += y; halt(); }
+    );
+    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+
+    // Find the loop prologue: lda #0, sta SCRATCH, flag top,
+    // lda y, ifeq SCRATCH, jmp end.
+    var top: ?usize = null;
+    for (out.words, 0..) |w, i| {
+        if (i + 5 >= out.words.len) break;
+        if (w == isa.encode(.lda_imm, 0, 0) and
+            out.words[i + 1] == isa.encode(.sta, codegen_mod.SCRATCH, 0) and
+            out.words[i + 3] == isa.encode(.lda_mem, 1, 0) and
+            out.words[i + 4] == isa.encode(.ifeq, codegen_mod.SCRATCH, 0))
+        {
+            top = i;
+            break;
+        }
+    }
+    const t = top orelse return error.TestUnexpectedResult;
+
+    const top_slot: u4 = @intCast((out.words[t + 2] >> 4) & 0xF);
+    const end_slot: u4 = @intCast((out.words[t + 5] >> 4) & 0xF);
+    try std.testing.expect(top_slot != end_slot);
+
+    // The loop must close with a backedge to the top flag and, after it,
+    // the end flag the exit jump targets.
+    const back = isa.encode(.jmp, top_slot, 0);
+    const end = isa.encode(.flag, end_slot, 0);
+    var bi: ?usize = null;
+    var ei: ?usize = null;
+    for (out.words, 0..) |w, i| {
+        if (bi == null and w == back) bi = i;
+        if (bi != null and w == end) {
+            ei = i;
+            break;
+        }
+    }
+    try std.testing.expect(bi != null and ei != null and ei.? > bi.?);
 }
 
 test "fourb_compile compiles valid source and reports errors" {
