@@ -4,3 +4,4 @@ zig-pkg
 examples/*.4b
 session-*.md
 prompt-*.md
+compile_flags.txt
