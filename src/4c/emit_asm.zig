@@ -15,9 +15,10 @@ pub fn write(
     const w = &aw.writer;
 
     for (words) |word| {
-        const op: isa.Op = @enumFromInt(@as(u4, @intCast((word >> 8) & 0xF)));
-        const a: u4 = @intCast((word >> 4) & 0xF);
-        const b: u4 = @intCast(word & 0xF);
+        const d = isa.decode(word);
+        const op = d.op;
+        const a = d.a;
+        const b = d.b;
 
         const m = mnemonic(op);
         try w.writeAll(m);

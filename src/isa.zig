@@ -125,6 +125,16 @@ pub fn encode(op: Op, a: u4, b: u4) u16 {
     return (@as(u16, @intFromEnum(op)) << 8) | (@as(u16, a) << 4) | @as(u16, b);
 }
 
+pub const Decoded = struct { op: Op, a: u4, b: u4 };
+
+pub fn decode(word: u16) Decoded {
+    return .{
+        .op = @enumFromInt(@as(u4, @intCast((word >> 8) & 0xF))),
+        .a = @intCast((word >> 4) & 0xF),
+        .b = @intCast(word & 0xF),
+    };
+}
+
 test "all 16 opcodes covered exactly once" {
     var seen: [16]bool = @splat(false);
     for (specs) |s| {
@@ -150,4 +160,17 @@ test "encode vectors" {
     try std.testing.expectEqual(0x380, encode(.lda_imm, 8, 0));
     try std.testing.expectEqual(0x210, encode(.sta, 1, 0));
     try std.testing.expectEqual(0xC0F, encode(.jmp, 0, 0xF));
+}
+
+test "decode round-trips encode" {
+    const ops = [_]Op{
+        .nop,  .lda_mem, .sta,  .lda_imm, .read, .inc,  .cls,  .shl, .shr,
+        .peek, .flip,    .flag, .jmp,     .ifeq, .ifgt, .iflt,
+    };
+    for (ops) |op| {
+        const d = decode(encode(op, 1, 2));
+        try std.testing.expectEqual(op, d.op);
+        try std.testing.expectEqual(1, d.a);
+        try std.testing.expectEqual(2, d.b);
+    }
 }
