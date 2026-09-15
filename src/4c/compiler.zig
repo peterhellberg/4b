@@ -296,6 +296,29 @@ test "branch conditions lower correctly" {
     try expectBranch("!(a != 0 && b != 0)", 1, 1, 3);
 }
 
+test "builtin call errors" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const alloc = arena.allocator();
+
+    const cases = [_]struct { src: []const u8, msg: []const u8 }{
+        .{ .src = "fn main() { peek(1, 2); }\n", .msg = "cannot be discarded" },
+        .{ .src = "u4 x = 0;\nfn main() { x = cls(); }\n", .msg = "unknown call" },
+        .{ .src = "fn main() { nope(); }\n", .msg = "unknown call" },
+    };
+    for (cases) |c| {
+        var diag = dia.Diag.init(alloc, "t.4c", c.src);
+        const result = compileWords(alloc, &diag, c.src);
+        try std.testing.expectError(error.CompileFailed, result);
+        var found = false;
+        for (diag.errors.items) |e| {
+            if (std.mem.indexOf(u8, e.msg, c.msg) != null) found = true;
+        }
+        try std.testing.expect(found);
+    }
+}
+
 test "fourb_compile compiles valid source and reports errors" {
     var out: Image = undefined;
 

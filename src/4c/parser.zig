@@ -234,25 +234,31 @@ pub const Parser = struct {
         const span = Span{ .line = name_tok.line, .col = name_tok.col };
         _ = try self.expect(.lparen);
 
-        var call: ast.VoidCall = undefined;
-        if (std.mem.eql(u8, name_tok.text, "cls")) {
-            _ = try self.expect(.rparen);
-            call = .cls;
-        } else if (std.mem.eql(u8, name_tok.text, "halt")) {
-            _ = try self.expect(.rparen);
-            call = .halt;
-        } else if (std.mem.eql(u8, name_tok.text, "flip")) {
-            const x = try self.parseValue();
-            _ = try self.expect(.comma);
-            const y = try self.parseValue();
-            _ = try self.expect(.rparen);
-            call = .{ .flip = .{ .x = x, .y = y } };
-        } else {
-            if (isValueBuiltin(name_tok.text)) {
-                return self.errAt(name_tok, "result of '{s}()' cannot be discarded", .{name_tok.text});
-            }
+        const builtin = lookupBuiltin(name_tok.text) orelse {
             return self.errAt(name_tok, "unknown call '{s}'", .{name_tok.text});
+        };
+        if (!isVoidBuiltin(builtin)) {
+            return self.errAt(name_tok, "result of '{s}()' cannot be discarded", .{name_tok.text});
         }
+
+        const call: ast.VoidCall = switch (builtin) {
+            .cls => blk: {
+                _ = try self.expect(.rparen);
+                break :blk .cls;
+            },
+            .halt => blk: {
+                _ = try self.expect(.rparen);
+                break :blk .halt;
+            },
+            .flip => blk: {
+                const x = try self.parseValue();
+                _ = try self.expect(.comma);
+                const y = try self.parseValue();
+                _ = try self.expect(.rparen);
+                break :blk .{ .flip = .{ .x = x, .y = y } };
+            },
+            else => unreachable,
+        };
         return self.mkStmt(span, .{ .voidcall = call });
     }
 
@@ -472,22 +478,29 @@ pub const Parser = struct {
         const span = spanOf(name_tok);
         _ = try self.expect(.lparen);
 
-        if (std.mem.eql(u8, name_tok.text, "buttons")) {
-            _ = try self.expect(.rparen);
-            return self.mkExpr(span, .buttons);
+        const builtin = lookupBuiltin(name_tok.text) orelse {
+            return self.errAt(name_tok, "unknown call '{s}'", .{name_tok.text});
+        };
+        switch (builtin) {
+            .buttons => {
+                _ = try self.expect(.rparen);
+                return self.mkExpr(span, .buttons);
+            },
+            .btn_left, .btn_right, .btn_up, .btn_down => {
+                _ = try self.expect(.rparen);
+                return self.mkExpr(span, .{ .btn = btnOf(builtin) });
+            },
+            .peek => {
+                const x = try self.parseValue();
+                _ = try self.expect(.comma);
+                const y = try self.parseValue();
+                _ = try self.expect(.rparen);
+                return self.mkExpr(span, .{ .peek = .{ .x = x, .y = y } });
+            },
+            .cls, .halt, .flip => {
+                return self.errAt(name_tok, "unknown call '{s}'", .{name_tok.text});
+            },
         }
-        if (builtinBtn(name_tok.text)) |btn| {
-            _ = try self.expect(.rparen);
-            return self.mkExpr(span, .{ .btn = btn });
-        }
-        if (std.mem.eql(u8, name_tok.text, "peek")) {
-            const x = try self.parseValue();
-            _ = try self.expect(.comma);
-            const y = try self.parseValue();
-            _ = try self.expect(.rparen);
-            return self.mkExpr(span, .{ .peek = .{ .x = x, .y = y } });
-        }
-        return self.errAt(name_tok, "unknown call '{s}'", .{name_tok.text});
     }
 };
 
@@ -495,22 +508,54 @@ fn spanOf(t: Token) Span {
     return .{ .line = t.line, .col = t.col };
 }
 
-fn isValueBuiltin(name: []const u8) bool {
-    const names = [_][]const u8{
-        "peek", "buttons", "btn_left", "btn_right", "btn_up", "btn_down",
-    };
-    for (names) |n| {
-        if (std.mem.eql(u8, name, n)) return true;
+/// Every builtin call, void and value alike, in one table so the three
+/// call sites cannot disagree about which names exist.
+const Builtin = enum {
+    cls,
+    halt,
+    flip,
+    peek,
+    buttons,
+    btn_left,
+    btn_right,
+    btn_up,
+    btn_down,
+};
+
+const builtins = [_]struct { name: []const u8, op: Builtin }{
+    .{ .name = "cls", .op = .cls },
+    .{ .name = "halt", .op = .halt },
+    .{ .name = "flip", .op = .flip },
+    .{ .name = "peek", .op = .peek },
+    .{ .name = "buttons", .op = .buttons },
+    .{ .name = "btn_left", .op = .btn_left },
+    .{ .name = "btn_right", .op = .btn_right },
+    .{ .name = "btn_up", .op = .btn_up },
+    .{ .name = "btn_down", .op = .btn_down },
+};
+
+fn lookupBuiltin(name: []const u8) ?Builtin {
+    for (builtins) |b| {
+        if (std.mem.eql(u8, name, b.name)) return b.op;
     }
-    return false;
+    return null;
 }
 
-fn builtinBtn(name: []const u8) ?ast.Btn {
-    if (std.mem.eql(u8, name, "btn_left")) return .left;
-    if (std.mem.eql(u8, name, "btn_right")) return .right;
-    if (std.mem.eql(u8, name, "btn_up")) return .up;
-    if (std.mem.eql(u8, name, "btn_down")) return .down;
-    return null;
+fn isVoidBuiltin(b: Builtin) bool {
+    return switch (b) {
+        .cls, .halt, .flip => true,
+        else => false,
+    };
+}
+
+fn btnOf(b: Builtin) ast.Btn {
+    return switch (b) {
+        .btn_left => .left,
+        .btn_right => .right,
+        .btn_up => .up,
+        .btn_down => .down,
+        else => unreachable,
+    };
 }
 
 fn kindName(k: Kind) []const u8 {
