@@ -1,5 +1,4 @@
 ; flip a pixel at (8,8) while the up button is held
-const UP    = 4
 const EIGHT = 8
 
 lda #EIGHT
