@@ -61,7 +61,7 @@ pub fn main(args: std.process.Init) !u8 {
     const alloc = args.arena.allocator();
     const io = args.io;
 
-    const src = std.Io.Dir.cwd().readFileAlloc(io, input_path, alloc, .limited(1 << 20)) catch |e| {
+    const src = std.Io.Dir.cwd().readFileAlloc(io, input_path, alloc, .limited(dia.max_src_bytes)) catch |e| {
         std.debug.print("error: cannot read '{s}': {s}\n", .{ input_path, @errorName(e) });
         return 1;
     };

@@ -104,7 +104,7 @@ fn writeErrors(diag: *const dia.Diag, buf: ?[*]u8, cap: usize) void {
 }
 
 test "fourb_assemble assembles valid source and reports errors" {
-    var out: [384]u8 = undefined;
+    var out: Image = undefined;
 
     try std.testing.expectEqual(0, fourb_assemble("t.4a", "jmp @h\n@h:\nnop\n", 15, &out, null, 0));
     try std.testing.expectEqual(0x00, out[0]);
@@ -126,8 +126,8 @@ const forward_src = @embedFile("test/golden/forward.4a");
 const rawflag_src = @embedFile("test/golden/rawflag.4a");
 const orgdw_src = @embedFile("test/golden/orgdw.4a");
 
-fn padBytes(comptime data: []const u8) [384]u8 {
-    var img: [384]u8 = undefined;
+fn padBytes(comptime data: []const u8) Image {
+    var img: Image = undefined;
 
     @memset(&img, 0);
 
@@ -158,7 +158,7 @@ const orgdw_expected = padBytes(&[_]u8{
     0x00, 0x00, 0x00, 0xBC, 0x0A, 0x00, 0x00, 0x30, 0x12,
 });
 
-fn assembleAndCheck(src: []const u8, expected: *const [384]u8) !void {
+fn assembleAndCheck(src: []const u8, expected: *const Image) !void {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();
 

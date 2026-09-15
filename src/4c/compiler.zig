@@ -229,7 +229,7 @@ test "flip and peek reject two computed args" {
 }
 
 test "fourb_compile compiles valid source and reports errors" {
-    var out: [384]u8 = undefined;
+    var out: Image = undefined;
 
     const ok_src = "fn main() { halt(); }\n";
 
