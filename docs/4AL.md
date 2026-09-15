@@ -96,6 +96,7 @@ bits `[3:0]` are operand `B` (unused bits are `0`).
 | `lda`    | `#k`                |  `0011`| `acc := k`                                           |
 | `read`   | —                   |  `0100`| `acc := buttons` (bitfield, see §7)                  |
 | `inc`    | —                   |  `0101`| `acc := (acc + 1) mod 16`                            |
+| `dec`    | —                   |  `0101`| `acc := (acc - 1) mod 16` (encoded as opcode 0x5 with a=1) |
 | `cls`    | —                   |  `0110`| Clear the screen.                                    |
 | `shl`    | —                   |  `0111`| `acc := (acc << 1) mod 16`                           |
 | `shr`    | —                   |  `1000`| `acc := acc >> 1`                                    |
