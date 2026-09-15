@@ -336,3 +336,52 @@ test "fourb_compile compiles valid source and reports errors" {
     try std.testing.expect(msg.len > 0);
     try std.testing.expect(std.mem.startsWith(u8, msg, "t.4c:"));
 }
+
+fn countOp(words: []const u16, op: isa.Op, a: u4) usize {
+    var n: usize = 0;
+    for (words) |w| {
+        if (w == isa.encode(op, a, 0)) n += 1;
+    }
+    return n;
+}
+
+fn compileStmt(stmt: []const u8) ![]u16 {
+    const src = try std.fmt.allocPrint(std.testing.allocator, "u4 x = 5;\nfn main() {{ {s} halt(); }}\n", .{stmt});
+    defer std.testing.allocator.free(src);
+
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const alloc = arena.allocator();
+
+    var diag = dia.Diag.init(alloc, "t.4c", src);
+    const out = try compileWords(alloc, &diag, src);
+    try std.testing.expectEqual(0, diag.errors.items.len);
+    return try std.testing.allocator.dupe(u16, out.words);
+}
+
+test "subtraction uses fewest words" {
+    // x -= 1 is a single dec (0x510), not fifteen incs.
+    const minus1 = try compileStmt("x -= 1;");
+    defer std.testing.allocator.free(minus1);
+    try std.testing.expectEqual(1, countOp(minus1, .inc, 1));
+    try std.testing.expectEqual(0, countOp(minus1, .inc, 0));
+
+    // x -= 2 is two decs.
+    const minus2 = try compileStmt("x -= 2;");
+    defer std.testing.allocator.free(minus2);
+    try std.testing.expectEqual(2, countOp(minus2, .inc, 1));
+    try std.testing.expectEqual(0, countOp(minus2, .inc, 0));
+
+    // x -= 9 stays seven unrolled incs (16 - 9 < 9).
+    const minus9 = try compileStmt("x -= 9;");
+    defer std.testing.allocator.free(minus9);
+    try std.testing.expectEqual(0, countOp(minus9, .inc, 1));
+    try std.testing.expectEqual(7, countOp(minus9, .inc, 0));
+
+    // x += 3 is unaffected: three incs.
+    const plus3 = try compileStmt("x += 3;");
+    defer std.testing.allocator.free(plus3);
+    try std.testing.expectEqual(0, countOp(plus3, .inc, 1));
+    try std.testing.expectEqual(3, countOp(plus3, .inc, 0));
+}

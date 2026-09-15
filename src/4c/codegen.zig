@@ -162,17 +162,11 @@ pub const Codegen = struct {
     }
 
     fn evalArith(self: *Codegen, op: sema.ArithOp, lhs: *const Expr, rhs: *const Expr, line: u32, col: u32) Error!void {
-        // Fast path: constant amount -> inc chain.
+        // Fast path: constant amount -> fewest words (k decs when
+        // subtracting a small amount, else unrolled incs).
         if (rhs.* == .int) {
-            const k: u4 = rhs.int;
-            const n: u4 = if (op == .add) k else 0 -% k;
-
             try self.evalExpr(lhs, line, col);
-
-            var i: u4 = 0;
-
-            while (i < n) : (i += 1) _ = try self.w(.inc, 0, 0);
-
+            try self.adjustAcc(op == .sub, rhs.int);
             return;
         }
 
@@ -199,6 +193,19 @@ pub const Codegen = struct {
         _ = inner;
 
         return self.err(line, col, "expression too complex: unary minus on a runtime value needs an assignment target", .{});
+    }
+
+    /// Adjust acc by +/- k with the fewest words: k decs when
+    /// subtracting less than half the range, else unrolled incs.
+    fn adjustAcc(self: *Codegen, sub: bool, k: u4) Error!void {
+        if (sub and k != 0 and k < 8) {
+            var i: u4 = 0;
+            while (i < k) : (i += 1) _ = try self.w(.inc, 1, 0);
+            return;
+        }
+        const n: u4 = if (sub) 0 -% k else k;
+        var i: u4 = 0;
+        while (i < n) : (i += 1) _ = try self.w(.inc, 0, 0);
     }
 
     fn evalShift(self: *Codegen, left: bool, operand: *const Expr, dist: sema.ShiftDist, line: u32, col: u32) Error!void {
@@ -494,13 +501,9 @@ pub const Codegen = struct {
                 switch (value.*) {
                     .int => |k| {
                         if (k != 0) {
-                            const n: u4 = if (op == .add_assign) k else 0 -% k;
-
                             _ = try self.w(.lda_mem, r, 0);
 
-                            var i: u4 = 0;
-
-                            while (i < n) : (i += 1) _ = try self.w(.inc, 0, 0);
+                            try self.adjustAcc(op == .sub_assign, k);
 
                             _ = try self.w(.sta, r, 0);
                         }
@@ -552,10 +555,7 @@ pub const Codegen = struct {
         _ = try self.w(.lda_mem, target, 0);
         switch (body) {
             .add => _ = try self.w(.inc, 0, 0),
-            .sub => {
-                var i: u4 = 0;
-                while (i < 15) : (i += 1) _ = try self.w(.inc, 0, 0);
-            },
+            .sub => _ = try self.w(.inc, 1, 0),
             .shl => _ = try self.w(.shl, 0, 0),
             .shr => _ = try self.w(.shr, 0, 0),
         }
