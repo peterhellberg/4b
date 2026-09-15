@@ -27,6 +27,8 @@ pub fn main(args: std.process.Init) !u8 {
             };
         } else if (std.mem.startsWith(u8, arg, "-o") and arg.len > 2) {
             opts.output = arg[2..];
+        } else if (std.mem.startsWith(u8, arg, "--output=")) {
+            opts.output = arg["--output=".len..];
         } else if (std.mem.startsWith(u8, arg, "-")) {
             std.debug.print("error: unknown option '{s}'\n", .{arg});
             return 1;
@@ -70,7 +72,10 @@ pub fn main(args: std.process.Init) !u8 {
         return 1;
     }
 
-    const output_path = opts.output orelse defaultOutput(alloc, input_path);
+    const output_path = opts.output orelse defaultOutput(alloc, input_path) catch {
+        std.debug.print("error: out of memory\n", .{});
+        return 1;
+    };
 
     std.Io.Dir.cwd().writeFile(io, .{
         .sub_path = output_path,
@@ -86,15 +91,32 @@ pub fn main(args: std.process.Init) !u8 {
     return 0;
 }
 
-fn defaultOutput(alloc: std.mem.Allocator, input_path: []const u8) []const u8 {
-    const stem_len = if (std.mem.lastIndexOfScalar(u8, input_path, '.')) |dot|
-        dot
+fn defaultOutput(alloc: std.mem.Allocator, input_path: []const u8) ![]const u8 {
+    // Only treat a '.' after the last '/' as an extension separator.
+    const base = if (std.mem.lastIndexOfScalar(u8, input_path, '/')) |s| s + 1 else 0;
+    const stem_len = if (std.mem.lastIndexOfScalar(u8, input_path[base..], '.')) |dot|
+        base + dot
     else
         input_path.len;
 
-    return std.fmt.allocPrint(alloc, "{s}.4b", .{
+    return try std.fmt.allocPrint(alloc, "{s}.4b", .{
         input_path[0..stem_len],
-    }) catch return input_path;
+    });
+}
+
+test "defaultOutput keeps directories with dots" {
+    const alloc = std.testing.allocator;
+    const out = try defaultOutput(alloc, "my.dir/prog");
+    defer alloc.free(out);
+    try std.testing.expectEqualStrings("my.dir/prog.4b", out);
+
+    const out2 = try defaultOutput(alloc, "prog.4a");
+    defer alloc.free(out2);
+    try std.testing.expectEqualStrings("prog.4b", out2);
+
+    const out3 = try defaultOutput(alloc, "prog");
+    defer alloc.free(out3);
+    try std.testing.expectEqualStrings("prog.4b", out3);
 }
 
 fn printUsage() void {
