@@ -320,18 +320,18 @@ test "parse lda #8 sta r1" {
     const tokens = try lexer.lex(arena.allocator(), &diag, "lda #8\nsta r1\n");
     const items = try parse(arena.allocator(), &diag, tokens.items);
 
-    try std.testing.expectEqual(@as(usize, 2), items.items.len);
-    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+    try std.testing.expectEqual(2, items.items.len);
+    try std.testing.expectEqual(0, diag.errors.items.len);
 
     const inst0 = items.items[0].inst;
 
     try std.testing.expectEqual(isa.Op.lda_mem, inst0.spec.op);
-    try std.testing.expectEqual(@as(u4, 8), inst0.a.?.imm);
+    try std.testing.expectEqual(8, inst0.a.?.imm);
 
     const inst1 = items.items[1].inst;
 
     try std.testing.expectEqual(isa.Op.sta, inst1.spec.op);
-    try std.testing.expectEqual(@as(u4, 1), inst1.a.?.reg);
+    try std.testing.expectEqual(1, inst1.a.?.reg);
 }
 
 test "parse label definition" {
@@ -343,8 +343,8 @@ test "parse label definition" {
     const tokens = try lexer.lex(arena.allocator(), &diag, "@foo:\n");
     const items = try parse(arena.allocator(), &diag, tokens.items);
 
-    try std.testing.expectEqual(@as(usize, 1), items.items.len);
-    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+    try std.testing.expectEqual(1, items.items.len);
+    try std.testing.expectEqual(0, diag.errors.items.len);
     try std.testing.expectEqualStrings("foo", items.items[0].label.name);
 }
 
@@ -357,7 +357,7 @@ test "parse jmp @label" {
     const tokens = try lexer.lex(arena.allocator(), &diag, "jmp @start\n");
     const items = try parse(arena.allocator(), &diag, tokens.items);
 
-    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+    try std.testing.expectEqual(0, diag.errors.items.len);
 
     const inst = items.items[0].inst;
 
@@ -374,9 +374,9 @@ test "parse const" {
     const tokens = try lexer.lex(arena.allocator(), &diag, "const X = 5\n");
     const items = try parse(arena.allocator(), &diag, tokens.items);
 
-    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+    try std.testing.expectEqual(0, diag.errors.items.len);
     try std.testing.expectEqualStrings("X", items.items[0].const_def.name);
-    try std.testing.expectEqual(@as(u4, 5), items.items[0].const_def.value);
+    try std.testing.expectEqual(5, items.items[0].const_def.value);
 }
 
 test "parse peek r0, r1" {
@@ -388,11 +388,11 @@ test "parse peek r0, r1" {
     const tokens = try lexer.lex(arena.allocator(), &diag, "peek r0, r1\n");
     const items = try parse(arena.allocator(), &diag, tokens.items);
 
-    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+    try std.testing.expectEqual(0, diag.errors.items.len);
 
     const inst = items.items[0].inst;
 
     try std.testing.expectEqual(isa.Op.peek, inst.spec.op);
-    try std.testing.expectEqual(@as(u4, 0), inst.a.?.reg);
-    try std.testing.expectEqual(@as(u4, 1), inst.b.?.reg);
+    try std.testing.expectEqual(0, inst.a.?.reg);
+    try std.testing.expectEqual(1, inst.b.?.reg);
 }

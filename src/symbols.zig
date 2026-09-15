@@ -161,9 +161,9 @@ test "analyze labels and consts" {
     const items = try @import("parser.zig").parse(arena.allocator(), &diag, tokens.items);
     const sym = try analyze(arena.allocator(), &diag, items.items);
 
-    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
-    try std.testing.expectEqual(@as(u4, 0), sym.labels.get("start").?);
-    try std.testing.expectEqual(@as(u4, 1), sym.next_slot);
+    try std.testing.expectEqual(0, diag.errors.items.len);
+    try std.testing.expectEqual(0, sym.labels.get("start").?);
+    try std.testing.expectEqual(1, sym.next_slot);
 }
 
 test "reject reserved name as const" {

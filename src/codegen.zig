@@ -107,29 +107,29 @@ fn generateSrc(src: []const u8) !std.ArrayList(u16) {
     }
     var words = try generate(alloc, &diag, &sym, items.items);
     errdefer words.deinit(alloc);
-    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+    try std.testing.expectEqual(0, diag.errors.items.len);
     return words;
 }
 test "encode nop" {
     var words = try generateSrc("nop\n");
     defer words.deinit(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 1), words.items.len);
-    try std.testing.expectEqual(@as(u16, 0x000), words.items[0]);
+    try std.testing.expectEqual(1, words.items.len);
+    try std.testing.expectEqual(0x000, words.items[0]);
 }
 
 test "encode lda #8" {
     var words = try generateSrc("lda #8\n");
     defer words.deinit(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 1), words.items.len);
-    try std.testing.expectEqual(@as(u16, 0x380), words.items[0]);
+    try std.testing.expectEqual(1, words.items.len);
+    try std.testing.expectEqual(0x380, words.items[0]);
 }
 
 test "encode label and jmp" {
     var words = try generateSrc("@start:\njmp @start\n");
     defer words.deinit(std.testing.allocator);
-    try std.testing.expectEqual(@as(usize, 2), words.items.len);
-    try std.testing.expectEqual(@as(u16, 0xB00), words.items[0]);
-    try std.testing.expectEqual(@as(u16, 0xC00), words.items[1]);
+    try std.testing.expectEqual(2, words.items.len);
+    try std.testing.expectEqual(0xB00, words.items[0]);
+    try std.testing.expectEqual(0xC00, words.items[1]);
 }
 
 test "undefined label error" {

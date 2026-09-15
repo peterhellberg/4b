@@ -106,13 +106,13 @@ fn writeErrors(diag: *const dia.Diag, buf: ?[*]u8, cap: usize) void {
 test "fourb_assemble assembles valid source and reports errors" {
     var out: [384]u8 = undefined;
 
-    try std.testing.expectEqual(@as(c_int, 0), fourb_assemble("t.4a", "jmp @h\n@h:\nnop\n", 15, &out, null, 0));
-    try std.testing.expectEqual(@as(u8, 0x00), out[0]);
-    try std.testing.expectEqual(@as(u8, 0x0C), out[1]);
+    try std.testing.expectEqual(0, fourb_assemble("t.4a", "jmp @h\n@h:\nnop\n", 15, &out, null, 0));
+    try std.testing.expectEqual(0x00, out[0]);
+    try std.testing.expectEqual(0x0C, out[1]);
 
     var err_buf: [256]u8 = undefined;
 
-    try std.testing.expectEqual(@as(c_int, 1), fourb_assemble("t.4a", "jmp @nowhere\n", 13, &out, &err_buf, err_buf.len));
+    try std.testing.expectEqual(1, fourb_assemble("t.4a", "jmp @nowhere\n", 13, &out, &err_buf, err_buf.len));
 
     const msg = std.mem.sliceTo(&err_buf, 0);
 
@@ -168,7 +168,7 @@ fn assembleAndCheck(src: []const u8, expected: *const [384]u8) !void {
 
     const image = try assemble(alloc, &diag, src);
 
-    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+    try std.testing.expectEqual(0, diag.errors.items.len);
     try std.testing.expectEqualSlices(u8, expected, &image);
 }
 
@@ -274,10 +274,10 @@ test "const substitution" {
 
     var diag = dia.Diag.init(alloc, "<test>", "const N = 8\nlda #N\n");
     const image = try assemble(alloc, &diag, "const N = 8\nlda #N\n");
-    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+    try std.testing.expectEqual(0, diag.errors.items.len);
     // lda #8 -> 0x380, same bytes as the pack unit test.
-    try std.testing.expectEqual(@as(u8, 0x80), image[0]);
-    try std.testing.expectEqual(@as(u8, 0x03), image[1]);
+    try std.testing.expectEqual(0x80, image[0]);
+    try std.testing.expectEqual(0x03, image[1]);
 
     try assembleExpectError("lda #NOPE\n", "undefined const");
 }

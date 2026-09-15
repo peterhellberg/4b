@@ -28,11 +28,11 @@ test "pack lda #8 sta r1" {
 
     pack(&words, &img);
 
-    try std.testing.expectEqual(@as(u8, 0x80), img[0]);
-    try std.testing.expectEqual(@as(u8, 0x03), img[1]);
-    try std.testing.expectEqual(@as(u8, 0x21), img[2]);
+    try std.testing.expectEqual(0x80, img[0]);
+    try std.testing.expectEqual(0x03, img[1]);
+    try std.testing.expectEqual(0x21, img[2]);
 
-    for (img[3..]) |b| try std.testing.expectEqual(@as(u8, 0), b);
+    for (img[3..]) |b| try std.testing.expectEqual(0, b);
 }
 
 test "pack nop" {
@@ -41,7 +41,7 @@ test "pack nop" {
 
     pack(&words, &img);
 
-    for (img) |b| try std.testing.expectEqual(@as(u8, 0), b);
+    for (img) |b| try std.testing.expectEqual(0, b);
 }
 
 test "pack flag and jmp" {
@@ -50,10 +50,10 @@ test "pack flag and jmp" {
 
     pack(&words, &img);
 
-    try std.testing.expectEqual(@as(u8, 0x00), img[0]);
-    try std.testing.expectEqual(@as(u8, 0x0B), img[1]);
-    try std.testing.expectEqual(@as(u8, 0xC0), img[2]);
-    try std.testing.expectEqual(@as(u8, 0x00), img[3]);
+    try std.testing.expectEqual(0x00, img[0]);
+    try std.testing.expectEqual(0x0B, img[1]);
+    try std.testing.expectEqual(0xC0, img[2]);
+    try std.testing.expectEqual(0x00, img[3]);
 }
 
 test "pack masks upper nibble" {
@@ -62,6 +62,6 @@ test "pack masks upper nibble" {
 
     pack(&words, &img);
 
-    try std.testing.expectEqual(@as(u8, 0xFF), img[0]);
-    try std.testing.expectEqual(@as(u8, 0x0F), img[1]);
+    try std.testing.expectEqual(0xFF, img[0]);
+    try std.testing.expectEqual(0x0F, img[1]);
 }
