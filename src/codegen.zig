@@ -44,7 +44,10 @@ pub fn generate(alloc: std.mem.Allocator, diag: *dia.Diag, sym: *const symbols.S
                 pos += 1;
             },
         }
-        std.debug.assert(pos <= rom.IMAGE_WORDS);
+        if (pos > rom.IMAGE_WORDS) {
+            diag.err(1, 1, "program too long (exceeds 256 instructions)", .{});
+            return error.CodegenError;
+        }
     }
 
     return words;
