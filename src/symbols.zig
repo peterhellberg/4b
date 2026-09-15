@@ -4,17 +4,12 @@ const dia = @import("dia");
 
 const Item = isa.Item;
 
-const reserved_mnemonics = [_][]const u8{
-    "nop",  "lda",  "sta",  "read", "inc",  "cls",  "shl",  "shr",
-    "peek", "flip", "flag", "jmp",  "ifeq", "ifgt", "iflt",
-};
-
 const reserved_directives = [_][]const u8{ "const", "org", "dw" };
 
 pub const Symbols = struct {
     consts: std.StringHashMap(u4),
     labels: std.StringHashMap(u4),
-    next_slot: u4 = 0,
+    next_slot: u8 = 0,
 
     pub fn init(alloc: std.mem.Allocator) Symbols {
         return .{
@@ -25,8 +20,8 @@ pub const Symbols = struct {
 };
 
 pub fn isReserved(name: []const u8) bool {
-    for (reserved_mnemonics) |m| {
-        if (std.ascii.eqlIgnoreCase(name, m)) return true;
+    for (isa.specs) |s| {
+        if (std.ascii.eqlIgnoreCase(name, s.mnemonic)) return true;
     }
 
     for (reserved_directives) |d| {
@@ -147,7 +142,7 @@ fn defineLabel(sym: *Symbols, diag: *dia.Diag, name: []const u8, line: u32, col:
         return null;
     }
 
-    const slot = sym.next_slot;
+    const slot: u4 = @intCast(sym.next_slot);
 
     sym.next_slot += 1;
     sym.labels.put(name, slot) catch return null;

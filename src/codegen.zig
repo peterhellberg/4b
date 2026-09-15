@@ -86,41 +86,47 @@ fn resolveOperand(sym: *const symbols.Symbols, kind: isa.OperandKind, op: ?Opera
     }
 }
 
+fn generateSrc(src: []const u8) !std.ArrayList(u16) {
+    const alloc = std.testing.allocator;
+    var diag = dia.Diag.init(alloc, "<test>", src);
+    defer diag.deinit();
+    const tokens = try @import("lexer.zig").lex(alloc, &diag, src);
+    defer {
+        var t = tokens;
+        t.deinit(alloc);
+    }
+    const items = try @import("parser.zig").parse(alloc, &diag, tokens.items);
+    defer {
+        var it = items;
+        it.deinit(alloc);
+    }
+    var sym = try symbols.analyze(alloc, &diag, items.items);
+    defer {
+        sym.consts.deinit();
+        sym.labels.deinit();
+    }
+    var words = try generate(alloc, &diag, &sym, items.items);
+    errdefer words.deinit(alloc);
+    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+    return words;
+}
 test "encode nop" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    var diag = dia.Diag.init(arena.allocator(), "<test>", "");
-    const sym = symbols.Symbols.init(arena.allocator());
-    const src = "nop\n";
-    const tokens = try @import("lexer.zig").lex(arena.allocator(), &diag, src);
-    const items = try @import("parser.zig").parse(arena.allocator(), &diag, tokens.items);
-    const words = try generate(arena.allocator(), &diag, &sym, items.items);
+    var words = try generateSrc("nop\n");
+    defer words.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 1), words.items.len);
     try std.testing.expectEqual(@as(u16, 0x000), words.items[0]);
 }
 
 test "encode lda #8" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    var diag = dia.Diag.init(arena.allocator(), "<test>", "");
-    const sym = symbols.Symbols.init(arena.allocator());
-    const src = "lda #8\n";
-    const tokens = try @import("lexer.zig").lex(arena.allocator(), &diag, src);
-    const items = try @import("parser.zig").parse(arena.allocator(), &diag, tokens.items);
-    const words = try generate(arena.allocator(), &diag, &sym, items.items);
+    var words = try generateSrc("lda #8\n");
+    defer words.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 1), words.items.len);
     try std.testing.expectEqual(@as(u16, 0x380), words.items[0]);
 }
 
 test "encode label and jmp" {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
-    defer arena.deinit();
-    var diag = dia.Diag.init(arena.allocator(), "<test>", "");
-    const src = "@start:\njmp @start\n";
-    const tokens = try @import("lexer.zig").lex(arena.allocator(), &diag, src);
-    const items = try @import("parser.zig").parse(arena.allocator(), &diag, tokens.items);
-    const sym = try symbols.analyze(arena.allocator(), &diag, items.items);
-    const words = try generate(arena.allocator(), &diag, &sym, items.items);
+    var words = try generateSrc("@start:\njmp @start\n");
+    defer words.deinit(std.testing.allocator);
     try std.testing.expectEqual(@as(usize, 2), words.items.len);
     try std.testing.expectEqual(@as(u16, 0xB00), words.items[0]);
     try std.testing.expectEqual(@as(u16, 0xC00), words.items[1]);

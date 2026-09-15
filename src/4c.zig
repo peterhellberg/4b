@@ -80,11 +80,6 @@ pub fn main(args: std.process.Init) !u8 {
         },
     };
 
-    if (diag.hasErrors()) {
-        diag.printAll();
-        return 1;
-    }
-
     if (opts.emit_asm) |path| {
         var text = std.ArrayList(u8).empty;
 

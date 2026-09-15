@@ -66,9 +66,8 @@ fn parseLine(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Token, i
 
 fn parseStatement(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Token, idx: *usize, items: *std.ArrayList(Item)) ParseError!void {
     const tok = tokens[idx.*];
-    const name = toLower(alloc, tok.text);
 
-    if (std.mem.eql(u8, name, "const")) {
+    if (std.ascii.eqlIgnoreCase(tok.text, "const")) {
         idx.* += 1;
         const name_tok = expectToken(tokens, idx, .ident, diag, "expected const name") orelse return error.ParseError;
 
@@ -85,7 +84,7 @@ fn parseStatement(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Tok
         return;
     }
 
-    if (std.mem.eql(u8, name, "org")) {
+    if (std.ascii.eqlIgnoreCase(tok.text, "org")) {
         idx.* += 1;
 
         const val_tok = expectToken(tokens, idx, .number, diag, "expected position value for org") orelse return error.ParseError;
@@ -99,7 +98,7 @@ fn parseStatement(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Tok
         return;
     }
 
-    if (std.mem.eql(u8, name, "dw")) {
+    if (std.ascii.eqlIgnoreCase(tok.text, "dw")) {
         idx.* += 1;
 
         const val_tok = expectToken(tokens, idx, .number, diag, "expected word value for dw") orelse return error.ParseError;
@@ -285,16 +284,6 @@ fn skipToEol(tokens: []const Token, idx: *usize) void {
     {
         idx.* += 1;
     }
-}
-
-fn toLower(alloc: std.mem.Allocator, s: []const u8) []const u8 {
-    const buf = alloc.alloc(u8, s.len) catch return s;
-
-    for (s, 0..) |c, i| {
-        buf[i] = std.ascii.toLower(c);
-    }
-
-    return buf;
 }
 
 fn parseRegisterIndex(text: []const u8) ?u4 {

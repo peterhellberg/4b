@@ -23,23 +23,6 @@ pub const Result = struct {
     slots: []SlotInfo,
 };
 
-fn capturesBreak(s: *const Stmt) bool {
-    switch (s.kind) {
-        .brk => return true,
-        .block => |list| {
-            for (list) |one| {
-                if (capturesBreak(one)) return true;
-            }
-            return false;
-        },
-        .if_stmt => |i| {
-            if (capturesBreak(i.then_stmt)) return true;
-            return if (i.else_stmt) |e| capturesBreak(e) else false;
-        },
-        else => return false,
-    }
-}
-
 const LoopCtx = struct {
     top_slot: usize,
     brk_patches: std.ArrayList(usize) = .empty,

@@ -41,6 +41,18 @@ fn hexVal(c: u8) u8 {
     return c - 'A' + 10;
 }
 
+fn pushSingle(tokens: *std.ArrayList(Token), alloc: std.mem.Allocator, src: []const u8, i: *usize, line: u32, col: *u32, kind: Kind) !void {
+    try tokens.append(alloc, .{
+        .kind = kind,
+        .text = src[i.* .. i.* + 1],
+        .value = 0,
+        .line = line,
+        .col = col.*,
+    });
+    i.* += 1;
+    col.* += 1;
+}
+
 pub const LexError = error{ LexError, OutOfMemory };
 
 pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!std.ArrayList(Token) {
@@ -84,67 +96,27 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
         }
 
         if (c == '@') {
-            try tokens.append(alloc, .{
-                .kind = .at,
-                .text = src[i .. i + 1],
-                .value = 0,
-                .line = line,
-                .col = col,
-            });
-            i += 1;
-            col += 1;
+            try pushSingle(&tokens, alloc, src, &i, line, &col, .at);
             continue;
         }
 
         if (c == '#') {
-            try tokens.append(alloc, .{
-                .kind = .hash,
-                .text = src[i .. i + 1],
-                .value = 0,
-                .line = line,
-                .col = col,
-            });
-            i += 1;
-            col += 1;
+            try pushSingle(&tokens, alloc, src, &i, line, &col, .hash);
             continue;
         }
 
         if (c == ',') {
-            try tokens.append(alloc, .{
-                .kind = .comma,
-                .text = src[i .. i + 1],
-                .value = 0,
-                .line = line,
-                .col = col,
-            });
-            i += 1;
-            col += 1;
+            try pushSingle(&tokens, alloc, src, &i, line, &col, .comma);
             continue;
         }
 
         if (c == ':') {
-            try tokens.append(alloc, .{
-                .kind = .colon,
-                .text = src[i .. i + 1],
-                .value = 0,
-                .line = line,
-                .col = col,
-            });
-            i += 1;
-            col += 1;
+            try pushSingle(&tokens, alloc, src, &i, line, &col, .colon);
             continue;
         }
 
         if (c == '=') {
-            try tokens.append(alloc, .{
-                .kind = .equals,
-                .text = src[i .. i + 1],
-                .value = 0,
-                .line = line,
-                .col = col,
-            });
-            i += 1;
-            col += 1;
+            try pushSingle(&tokens, alloc, src, &i, line, &col, .equals);
             continue;
         }
 
@@ -218,7 +190,6 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
             const start_line = line;
             const start_col = col;
             while (i < src.len and isIdentCont(src[i])) {
-                if (src[i] == '\n') break;
                 i += 1;
                 col += 1;
             }

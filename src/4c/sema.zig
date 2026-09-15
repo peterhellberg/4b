@@ -27,13 +27,6 @@ pub const Expr = union(enum) {
     neg: *Expr,
     band: struct { operand: *Expr, mask: u4 },
     shift: struct { left: bool, operand: *Expr, dist: ShiftDist },
-
-    pub fn isAtomic(self: *const Expr) bool {
-        return switch (self.*) {
-            .int, .variable => true,
-            else => false,
-        };
-    }
 };
 
 pub const VoidCall = union(enum) {
@@ -364,11 +357,7 @@ pub const Semer = struct {
                     .rhs = rhs,
                 } };
             },
-            .truthy => |e| blk: {
-                const v = try self.convExpr(e);
-                if (v.* == .int) break :blk .{ .truthy = v };
-                break :blk .{ .truthy = v };
-            },
+            .truthy => |e| .{ .truthy = try self.convExpr(e) },
             .not_cond => |inner| .{ .not_cond = try self.convCond(inner) },
             .and_cond => |a| .{ .and_cond = .{ .lhs = try self.convCond(a.lhs), .rhs = try self.convCond(a.rhs) } },
             .or_cond => |o| .{ .or_cond = .{ .lhs = try self.convCond(o.lhs), .rhs = try self.convCond(o.rhs) } },
