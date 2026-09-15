@@ -181,7 +181,13 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
                 };
                 if (!valid) break;
                 started = true;
-                value = value * radix + hexVal(d);
+                const hi = @mulWithOverflow(value, @as(u32, radix));
+                const lo = @addWithOverflow(hi[0], @as(u32, hexVal(d)));
+                if (hi[1] != 0 or lo[1] != 0) {
+                    diag.err(start_line, start_col, "numeric literal out of range", .{});
+                    return error.LexError;
+                }
+                value = lo[0];
                 i += 1;
                 col += 1;
             }
@@ -288,4 +294,27 @@ test "comments ignored" {
 
 test "empty line" {
     try expectTokens("\n", &.{ .eol, .eof });
+}
+
+fn expectLexError(src: []const u8) !void {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    var diag = dia.Diag.init(arena.allocator(), "<test>", src);
+
+    const result = lex(arena.allocator(), &diag, src);
+    try std.testing.expectError(error.LexError, result);
+    try std.testing.expect(diag.hasErrors());
+}
+
+test "numeric literal overflow" {
+    try expectLexError("99999999999\n");
+    try expectLexError("0xFFFFFFFFF\n");
+}
+
+test "numeric literal errors" {
+    try expectLexError("0x\n");
+    try expectLexError("0b\n");
+    try expectLexError("123abc\n");
+    try expectLexError("`\n");
 }
