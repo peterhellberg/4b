@@ -100,50 +100,50 @@ test "vm: data movement and alu" {
 
     vm.program[0] = inst(0x0, 0xF, 0xF);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 1), vm.pc);
+    try std.testing.expectEqual(1, vm.pc);
 
     vm.program[1] = inst(0x3, 9, 0);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 9), vm.acc);
+    try std.testing.expectEqual(9, vm.acc);
 
     vm.program[2] = inst(0x2, 4, 0);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 9), vm.regs[4]);
+    try std.testing.expectEqual(9, vm.regs[4]);
 
     vm.acc = 0;
     vm.program[3] = inst(0x1, 4, 0);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 9), vm.acc);
+    try std.testing.expectEqual(9, vm.acc);
 
     vm.buttons = 0b1010;
     vm.program[4] = inst(0x4, 0, 0);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 0b1010), vm.acc);
+    try std.testing.expectEqual(0b1010, vm.acc);
 
     vm.acc = 15;
     vm.program[5] = inst(0x5, 0, 0);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 0), vm.acc);
+    try std.testing.expectEqual(0, vm.acc);
 
     vm.acc = 8;
     vm.program[6] = inst(0x7, 0, 0);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 0), vm.acc);
+    try std.testing.expectEqual(0, vm.acc);
 
     vm.acc = 15;
     vm.program[7] = inst(0x7, 0, 0);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 14), vm.acc);
+    try std.testing.expectEqual(14, vm.acc);
 
     vm.acc = 1;
     vm.program[8] = inst(0x8, 0, 0);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 0), vm.acc);
+    try std.testing.expectEqual(0, vm.acc);
 
     vm.acc = 15;
     vm.program[9] = inst(0x8, 0, 0);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 7), vm.acc);
+    try std.testing.expectEqual(7, vm.acc);
 }
 
 test "vm: peek flip cls" {
@@ -154,16 +154,16 @@ test "vm: peek flip cls" {
 
     vm.program[0] = inst(0xA, 2, 3);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 1), vm.screen[5 * SCREEN_W + 3]);
-    try std.testing.expectEqual(@as(u8, 0), vm.screen[5 * SCREEN_W + 2]);
+    try std.testing.expectEqual(1, vm.screen[5 * SCREEN_W + 3]);
+    try std.testing.expectEqual(0, vm.screen[5 * SCREEN_W + 2]);
 
     vm.program[1] = inst(0x9, 2, 3);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 1), vm.acc);
+    try std.testing.expectEqual(1, vm.acc);
 
     vm.program[2] = inst(0x6, 0, 0);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 0), vm.screen[5 * SCREEN_W + 3]);
+    try std.testing.expectEqual(0, vm.screen[5 * SCREEN_W + 3]);
 }
 
 test "vm: flag records own position and jmp returns to it" {
@@ -174,15 +174,15 @@ test "vm: flag records own position and jmp returns to it" {
     vm.pc = 13;
 
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 13), vm.flags[1]);
-    try std.testing.expectEqual(@as(u8, 14), vm.pc);
+    try std.testing.expectEqual(13, vm.flags[1]);
+    try std.testing.expectEqual(14, vm.pc);
 
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 13), vm.pc);
+    try std.testing.expectEqual(13, vm.pc);
 
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 14), vm.pc);
-    try std.testing.expectEqual(@as(u8, 13), vm.flags[1]);
+    try std.testing.expectEqual(14, vm.pc);
+    try std.testing.expectEqual(13, vm.flags[1]);
 }
 
 fn expectSkip(comptime op: u4, r: u4, acc: u4, executes_next: bool) !void {
@@ -216,8 +216,8 @@ test "vm: pc wraps at 255" {
     vm.program[255] = inst(0xB, 2, 0);
     vm.pc = 255;
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 255), vm.flags[2]);
-    try std.testing.expectEqual(@as(u8, 0), vm.pc);
+    try std.testing.expectEqual(255, vm.flags[2]);
+    try std.testing.expectEqual(0, vm.pc);
 
     var vm2: VM = undefined;
     fourb_vm_init(&vm2);
@@ -225,10 +225,10 @@ test "vm: pc wraps at 255" {
     vm2.program[0] = inst(0xC, 3, 0);
     vm2.program[255] = inst(0x5, 0, 0);
     fourb_vm_tick(&vm2);
-    try std.testing.expectEqual(@as(u8, 255), vm2.pc);
+    try std.testing.expectEqual(255, vm2.pc);
     fourb_vm_tick(&vm2);
-    try std.testing.expectEqual(@as(u8, 1), vm2.acc);
-    try std.testing.expectEqual(@as(u8, 0), vm2.pc);
+    try std.testing.expectEqual(1, vm2.acc);
+    try std.testing.expectEqual(0, vm2.pc);
 }
 
 test "vm: load rom unpacks lsb-first 12-bit words" {
@@ -236,28 +236,28 @@ test "vm: load rom unpacks lsb-first 12-bit words" {
     vm.acc = 9;
     const rom = [_]u8{ 0x80, 0x03, 0x21 };
     fourb_vm_load_rom(&vm, &rom, rom.len);
-    try std.testing.expectEqual(@as(u16, 0x380), vm.program[0]);
-    try std.testing.expectEqual(@as(u16, 0x210), vm.program[1]);
-    try std.testing.expectEqual(@as(u16, 0), vm.program[2]);
-    try std.testing.expectEqual(@as(u8, 0), vm.acc);
-    try std.testing.expectEqual(@as(u8, 0), vm.pc);
+    try std.testing.expectEqual(0x380, vm.program[0]);
+    try std.testing.expectEqual(0x210, vm.program[1]);
+    try std.testing.expectEqual(0, vm.program[2]);
+    try std.testing.expectEqual(0, vm.acc);
+    try std.testing.expectEqual(0, vm.pc);
 
     const truncated = [_]u8{ 0xFF, 0xFF };
     fourb_vm_load_rom(&vm, &truncated, truncated.len);
-    try std.testing.expectEqual(@as(u16, 0xFFF), vm.program[0]);
-    try std.testing.expectEqual(@as(u16, 0x00F), vm.program[1]);
-    try std.testing.expectEqual(@as(u16, 0), vm.program[2]);
+    try std.testing.expectEqual(0xFFF, vm.program[0]);
+    try std.testing.expectEqual(0x00F, vm.program[1]);
+    try std.testing.expectEqual(0, vm.program[2]);
 }
 
 test "vm: c abi layout matches 4b.c" {
-    try std.testing.expectEqual(@as(usize, 0), @offsetOf(VM, "program"));
-    try std.testing.expectEqual(@as(usize, 512), @offsetOf(VM, "regs"));
-    try std.testing.expectEqual(@as(usize, 528), @offsetOf(VM, "acc"));
-    try std.testing.expectEqual(@as(usize, 529), @offsetOf(VM, "screen"));
-    try std.testing.expectEqual(@as(usize, 785), @offsetOf(VM, "flags"));
-    try std.testing.expectEqual(@as(usize, 801), @offsetOf(VM, "pc"));
-    try std.testing.expectEqual(@as(usize, 802), @offsetOf(VM, "buttons"));
-    try std.testing.expectEqual(@as(usize, 804), @sizeOf(VM));
+    try std.testing.expectEqual(0, @offsetOf(VM, "program"));
+    try std.testing.expectEqual(512, @offsetOf(VM, "regs"));
+    try std.testing.expectEqual(528, @offsetOf(VM, "acc"));
+    try std.testing.expectEqual(529, @offsetOf(VM, "screen"));
+    try std.testing.expectEqual(785, @offsetOf(VM, "flags"));
+    try std.testing.expectEqual(801, @offsetOf(VM, "pc"));
+    try std.testing.expectEqual(802, @offsetOf(VM, "buttons"));
+    try std.testing.expectEqual(804, @sizeOf(VM));
 }
 
 test "vm: conditional skip wraps past 255" {
@@ -270,7 +270,7 @@ test "vm: conditional skip wraps past 255" {
     vm.acc = 5;
     vm.regs[9] = 4;
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 1), vm.pc);
+    try std.testing.expectEqual(1, vm.pc);
 }
 
 test "vm: double flip toggles back" {
@@ -280,8 +280,8 @@ test "vm: double flip toggles back" {
     vm.regs[1] = 1;
     vm.program[0] = inst(0xA, 0, 1);
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 1), vm.screen[1 * SCREEN_W + 1]);
+    try std.testing.expectEqual(1, vm.screen[1 * SCREEN_W + 1]);
     vm.pc = 0;
     fourb_vm_tick(&vm);
-    try std.testing.expectEqual(@as(u8, 0), vm.screen[1 * SCREEN_W + 1]);
+    try std.testing.expectEqual(0, vm.screen[1 * SCREEN_W + 1]);
 }

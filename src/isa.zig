@@ -137,8 +137,8 @@ test "lookupSpec is case-insensitive" {
 }
 
 test "encode vectors" {
-    try std.testing.expectEqual(@as(u16, 0x000), encode(.nop, 0, 0));
-    try std.testing.expectEqual(@as(u16, 0x380), encode(.lda_imm, 8, 0));
-    try std.testing.expectEqual(@as(u16, 0x210), encode(.sta, 1, 0));
-    try std.testing.expectEqual(@as(u16, 0xC0F), encode(.jmp, 0, 0xF));
+    try std.testing.expectEqual(0x000, encode(.nop, 0, 0));
+    try std.testing.expectEqual(0x380, encode(.lda_imm, 8, 0));
+    try std.testing.expectEqual(0x210, encode(.sta, 1, 0));
+    try std.testing.expectEqual(0xC0F, encode(.jmp, 0, 0xF));
 }

@@ -126,7 +126,7 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
                 const dv: ?u64 = switch (radix) {
                     10 => if (std.ascii.isDigit(d)) d - '0' else null,
                     16 => std.fmt.charToDigit(d, 16) catch null,
-                    2 => if (d == '0') @as(u64, 0) else if (d == '1') @as(u64, 1) else null,
+                    2 => if (d == '0') 0 else if (d == '1') 1 else null,
                     else => unreachable,
                 };
                 if (dv == null) break;

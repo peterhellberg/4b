@@ -152,7 +152,7 @@ test "variable add emits bounded counter loop" {
         \\u4 y = 3;
         \\fn main() { x += y; halt(); }
     );
-    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+    try std.testing.expectEqual(0, diag.errors.items.len);
 
     // Find the loop prologue: lda #0, sta SCRATCH, flag top,
     // lda y, ifeq SCRATCH, jmp end.
@@ -225,7 +225,7 @@ test "flip and peek reject two computed args" {
     const ok = "u4 x = 1;\nu4 y = 2;\nfn main() { flip(x + 1, y); halt(); }\n";
     var diag = dia.Diag.init(alloc, "t.4c", ok);
     _ = try compileWords(alloc, &diag, ok);
-    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+    try std.testing.expectEqual(0, diag.errors.items.len);
 }
 
 test "fourb_compile compiles valid source and reports errors" {
@@ -233,13 +233,13 @@ test "fourb_compile compiles valid source and reports errors" {
 
     const ok_src = "fn main() { halt(); }\n";
 
-    try std.testing.expectEqual(@as(c_int, 0), fourb_compile("t.4c", ok_src, ok_src.len, &out, null, 0));
+    try std.testing.expectEqual(0, fourb_compile("t.4c", ok_src, ok_src.len, &out, null, 0));
 
     const bad_src = "fn main() { nope(); }\n";
 
     var err_buf: [256]u8 = undefined;
 
-    try std.testing.expectEqual(@as(c_int, 1), fourb_compile("t.4c", bad_src, bad_src.len, &out, &err_buf, err_buf.len));
+    try std.testing.expectEqual(1, fourb_compile("t.4c", bad_src, bad_src.len, &out, &err_buf, err_buf.len));
 
     const msg = std.mem.sliceTo(&err_buf, 0);
 

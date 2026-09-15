@@ -196,7 +196,7 @@ pub const Semer = struct {
                     },
                     .expr => |inner| try self.evalConst(inner, depth + 1),
                 };
-                return if (s.left) v << @as(u2, @intCast(d)) else v >> @as(u2, @intCast(d));
+                return if (s.left) v << @intCast(d) else v >> @intCast(d);
             },
             else => {
                 return self.err(e.span.line, e.span.col, "expression is not a compile-time constant", .{});
@@ -304,7 +304,7 @@ pub const Semer = struct {
                 if (operand.* == .int) {
                     const d: u3 = @intCast(dist.lit);
                     const folded = try self.alloc.create(Expr);
-                    folded.* = .{ .int = if (s.left) operand.int << @as(u2, @intCast(d)) else operand.int >> @as(u2, @intCast(d)) };
+                    folded.* = .{ .int = if (s.left) operand.int << @intCast(d) else operand.int >> @intCast(d) };
                     break :blk folded.*;
                 }
                 break :blk Expr{ .shift = .{ .left = s.left, .operand = operand, .dist = dist } };
@@ -488,6 +488,6 @@ pub const Semer = struct {
 fn isContiguous(m: u4) bool {
     if (m == 0) return false;
     const wide: u8 = m;
-    const t = wide >> @as(u3, @intCast(@ctz(wide)));
+    const t = wide >> @intCast(@ctz(wide));
     return (t & (t +% 1)) == 0;
 }

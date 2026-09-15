@@ -153,8 +153,8 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
                 };
                 if (!valid) break;
                 started = true;
-                const hi = @mulWithOverflow(value, @as(u32, radix));
-                const lo = @addWithOverflow(hi[0], @as(u32, hexVal(d)));
+                const hi = @mulWithOverflow(value, radix);
+                const lo = @addWithOverflow(hi[0], hexVal(d));
                 if (hi[1] != 0 or lo[1] != 0) {
                     diag.err(start_line, start_col, "numeric literal out of range", .{});
                     return error.LexError;
