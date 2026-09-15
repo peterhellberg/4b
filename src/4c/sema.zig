@@ -103,6 +103,7 @@ pub const Semer = struct {
     consts: std.StringHashMapUnmanaged(u4),
     scopes: std.ArrayList(Scope) = .empty,
     next_reg: u8 = 0,
+    loop_depth: usize = 0,
 
     fn err(self: *Semer, line: u32, col: u32, comptime fmt: []const u8, args: anytype) Error {
         self.diag.err(line, col, fmt, args);
@@ -419,9 +420,23 @@ pub const Semer = struct {
                 .then_stmt = try self.convStmt(i.then_stmt),
                 .else_stmt = if (i.else_stmt) |e| try self.convStmt(e) else null,
             } },
-            .for_stmt => |f| .{ .for_stmt = .{ .body = try self.convStmt(f.body) } },
-            .brk => .brk,
-            .cont => .cont,
+            .for_stmt => |f| blk: {
+                self.loop_depth += 1;
+                defer self.loop_depth -= 1;
+                break :blk .{ .for_stmt = .{ .body = try self.convStmt(f.body) } };
+            },
+            .brk => blk: {
+                if (self.loop_depth == 0) {
+                    return self.err(s.span.line, s.span.col, "break outside loop", .{});
+                }
+                break :blk .brk;
+            },
+            .cont => blk: {
+                if (self.loop_depth == 0) {
+                    return self.err(s.span.line, s.span.col, "continue outside loop", .{});
+                }
+                break :blk .cont;
+            },
             .empty => .empty,
         };
         const node = try self.alloc.create(Stmt);
