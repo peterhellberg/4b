@@ -22,13 +22,19 @@ pub fn generate(alloc: std.mem.Allocator, diag: *dia.Diag, sym: *const symbols.S
                 pos += 1;
             },
             .inst => |inst| {
-                const a_val = resolveOperand(sym, inst.spec.a, inst.a, diag, inst.line, inst.col);
+                var a_val = resolveOperand(sym, inst.spec.a, inst.a, diag, inst.line, inst.col);
                 const b_val = resolveOperand(sym, inst.spec.b, inst.b, diag, inst.line, inst.col);
                 var op = inst.spec.op;
                 if (inst.a) |a| {
                     if ((a == .imm or a == .const_ref) and op == .lda_mem) {
                         op = .lda_imm;
                     }
+                }
+                // dec shares opcode 0x5 with inc; a == 1 selects decrement.
+                // inst.spec carries the table entry, so this only fires for
+                // the "dec" spelling, never for bare "inc".
+                if (op == .inc and std.mem.eql(u8, inst.spec.mnemonic, "dec")) {
+                    a_val = 1;
                 }
                 try words.append(alloc, isa.encode(op, a_val, b_val));
                 pos += 1;

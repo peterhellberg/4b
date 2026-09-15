@@ -20,7 +20,9 @@ pub fn write(
         const a = d.a;
         const b = d.b;
 
-        const m = mnemonic(op);
+        // Opcode 0x5 with a == 1 is the dec extension; any other a
+        // spells the historical inc.
+        const m = if (op == .inc and a == 1) "dec" else mnemonic(op);
         try w.writeAll(m);
 
         switch (op) {
@@ -74,11 +76,21 @@ test "round-trip every opcode" {
         .peek, .flip,    .flag, .jmp,     .ifeq, .ifgt, .iflt,
     };
     for (ops) |op| {
-        const words = [_]u16{isa.encode(op, 1, 2)};
+        // a == 0 so opcode 0x5 spells inc, not dec.
+        const words = [_]u16{isa.encode(op, 0, 2)};
         var text = std.ArrayList(u8).empty;
         defer text.deinit(alloc);
         try write(alloc, &words, &text);
         try std.testing.expect(text.items.len > "nop\n".len);
         try std.testing.expect(std.mem.startsWith(u8, text.items, mnemonic(op)));
     }
+}
+
+test "dec disassembles by spelling" {
+    const alloc = std.testing.allocator;
+    const words = [_]u16{ isa.encode(.inc, 1, 0), isa.encode(.inc, 0, 0) };
+    var text = std.ArrayList(u8).empty;
+    defer text.deinit(alloc);
+    try write(alloc, &words, &text);
+    try std.testing.expectEqualStrings("dec\ninc\n", text.items);
 }
