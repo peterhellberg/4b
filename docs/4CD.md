@@ -237,12 +237,12 @@ fn slot() u4 {
 Only *forward* jumps are phase-guarded — they are the only words that can
 outrun their target flag during the boot walk. Two guard forms exist:
 
-- **Conditional exits** (`if` joins): `lda #1; ifgt r15; jmp S`.
+- **Conditional exits** (`if`/`while` test arms): `lda #1; ifgt r15; jmp S`.
   The condition's own skip decides whether the `lda #1` runs, so the jump
   fires iff the condition is false and `PHASE` is 1.
-- **Unconditional forward jumps** (`break`, `continue`, the dynamic
-  arithmetic helper loops' exits): `lda r14; ifgt r15; jmp S`, which fires
-  iff `PHASE != 0` regardless of leftover `acc`.
+- **Unconditional forward jumps** (`if`/`else` joins, `break`, `continue`,
+  the dynamic arithmetic helper loops' exits): `lda r14; ifgt r15; jmp S`,
+  which fires iff `PHASE != 0` regardless of leftover `acc`.
 
 Backward jumps (loop backedges, `halt`'s spin) stay unguarded: their
 target flag was recorded earlier in the same linear pass, and the guard's
