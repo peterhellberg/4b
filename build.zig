@@ -140,6 +140,17 @@ pub fn build(b: *std.Build) void {
     for ([_][]const u8{ "move", "diag", "dpad" }) |name| {
         addExample(b, examples_step, compiler, name, "4c");
     }
+
+    // Cross matrix: every example also builds with the other toolchain so
+    // a broken fill.4c or move.4a fails the build. Suffixed outputs avoid
+    // clobbering the canonical examples/<name>.4b ROMs above.
+    for ([_][]const u8{ "move", "diag", "dpad" }) |name| {
+        addExampleOut(b, examples_step, assembler, name, "4a", "-4a");
+    }
+
+    for ([_][]const u8{ "halt", "line", "fill" }) |name| {
+        addExampleOut(b, examples_step, compiler, name, "4c", "-4c");
+    }
 }
 
 /// Create a plain Zig module for the given source file.
@@ -187,8 +198,32 @@ fn addExample(
     name: []const u8,
     ext: []const u8,
 ) void {
+    buildExample(b, step, tool, name, ext, "");
+}
+
+/// Add a step dependency like addExample but with a filename suffix, e.g.
+/// examples/move-4a.4b, so two toolchains can build the same example.
+fn addExampleOut(
+    b: *std.Build,
+    step: *std.Build.Step,
+    tool: *std.Build.Step.Compile,
+    name: []const u8,
+    ext: []const u8,
+    suffix: []const u8,
+) void {
+    buildExample(b, step, tool, name, ext, suffix);
+}
+
+fn buildExample(
+    b: *std.Build,
+    step: *std.Build.Step,
+    tool: *std.Build.Step.Compile,
+    name: []const u8,
+    ext: []const u8,
+    suffix: []const u8,
+) void {
     const src = std.fmt.allocPrint(b.allocator, "examples/{s}.{s}", .{ name, ext }) catch return;
-    const dst = std.fmt.allocPrint(b.allocator, "examples/{s}.4b", .{name}) catch return;
+    const dst = std.fmt.allocPrint(b.allocator, "examples/{s}{s}.4b", .{ name, suffix }) catch return;
 
     const run = b.addRunArtifact(tool);
     run.addFileArg(b.path(src));
