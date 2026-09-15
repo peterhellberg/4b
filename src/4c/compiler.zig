@@ -202,6 +202,29 @@ test "break outside loop is an error" {
     }
 }
 
+test "flip and peek reject two computed args" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const alloc = arena.allocator();
+
+    const bad = [_][]const u8{
+        "u4 x = 1;\nu4 y = 2;\nfn main() { flip(x + 1, y + 1); halt(); }\n",
+        "u4 x = 1;\nu4 y = 2;\nu4 p = 0;\nfn main() { p = peek(x + 1, y + 1); halt(); }\n",
+    };
+    for (bad) |src| {
+        var diag = dia.Diag.init(alloc, "t.4c", src);
+        const result = compileWords(alloc, &diag, src);
+        try std.testing.expectError(error.CompileFailed, result);
+        try std.testing.expect(diag.hasErrors());
+    }
+
+    const ok = "u4 x = 1;\nu4 y = 2;\nfn main() { flip(x + 1, y); halt(); }\n";
+    var diag = dia.Diag.init(alloc, "t.4c", ok);
+    _ = try compileWords(alloc, &diag, ok);
+    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+}
+
 test "fourb_compile compiles valid source and reports errors" {
     var out: [384]u8 = undefined;
 

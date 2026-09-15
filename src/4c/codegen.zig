@@ -610,11 +610,13 @@ pub const Codegen = struct {
                     _ = try self.w(.sta, SCRATCH, 0);
                     try self.effectGuard();
                     _ = try self.w(.flip, @intCast(xa.variable), SCRATCH);
-                } else {
+                } else if (ya == .variable) {
                     try self.evalExpr(f.x, line, col);
                     _ = try self.w(.sta, SCRATCH, 0);
                     try self.effectGuard();
                     _ = try self.w(.flip, SCRATCH, @intCast(ya.variable));
+                } else {
+                    return self.err(line, col, "at most one flip argument may be a computed value", .{});
                 }
             },
         }
