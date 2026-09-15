@@ -420,7 +420,6 @@ pub const Semer = struct {
     }
 
     pub fn run(self: *Semer, prog: *ast.Program) Error!Prog {
-
         var slots = std.ArrayList(VarSlot).empty;
 
         // constants first pass (in declaration order; forward refs rejected by lookup order)
