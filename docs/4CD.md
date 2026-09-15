@@ -218,7 +218,7 @@ fn emitPhaseJump(slot: u4) void {
     emit(.jmp, slot, 0);
 }
 
-/// Conditional-exit variant used by if/while: the condition's own skip
+/// Conditional-exit variant used by if tests: the condition's own skip
 /// decides whether the `lda #1` runs, so the jump fires iff the condition
 /// is false and PHASE is 1.
 fn emitGatedJmp(slot: u4) void {
@@ -237,7 +237,7 @@ fn slot() u4 {
 Only *forward* jumps are phase-guarded — they are the only words that can
 outrun their target flag during the boot walk. Two guard forms exist:
 
-- **Conditional exits** (`if`/`while` test arms): `lda #1; ifgt r15; jmp S`.
+- **Conditional exits** (`if` test arms): `lda #1; ifgt r15; jmp S`.
   The condition's own skip decides whether the `lda #1` runs, so the jump
   fires iff the condition is false and `PHASE` is 1.
 - **Unconditional forward jumps** (`if`/`else` joins, `break`, `continue`,
