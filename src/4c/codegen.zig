@@ -242,7 +242,9 @@ pub const Codegen = struct {
 
     /// Emit words that skip the trailing gated jump(s) iff cond holds.
     /// Every emitted jmp word index lands in `patches` for later fixup.
-    fn branchTrue(self: *Codegen, c: *const Cond, patches: *std.ArrayList(usize), line: u32, col: u32) Error!void {
+    /// Contract: `patches` fire iff cond is FALSE (they skip the
+    /// then-branch); fall-through means cond holds.
+    fn emitFalseExit(self: *Codegen, c: *const Cond, patches: *std.ArrayList(usize), line: u32, col: u32) Error!void {
         switch (c.*) {
             .truthy => |e| {
                 // Fast path: btn_*() leaves acc = 0/1, so the phase guard
@@ -271,28 +273,27 @@ pub const Codegen = struct {
                     .keep => try self.expandCmp(cm.op, cm.lhs, cm.rhs, patches, line, col),
                 }
             },
-            .not_cond => |inner| try self.branchFalse(inner, patches, line, col),
+            .not_cond => |inner| try self.emitTrueExit(inner, patches, line, col),
             .and_cond => |a| {
-                // fires past both branches only when both hold
-                try self.branchTrue(a.lhs, patches, line, col);
-                try self.branchTrue(a.rhs, patches, line, col);
+                // !(a && b) == !a || !b: exit iff either side fails
+                try self.emitFalseExit(a.lhs, patches, line, col);
+                try self.emitFalseExit(a.rhs, patches, line, col);
             },
             .or_cond => |o| {
-                // short-circuit join slot:
-                //   [JF(a)][G jmp T][JT(b) -> X][T flag]
+                // !(a || b) == !a && !b: exit only when both sides fail.
+                // Short-circuit join: [JT(a)][JF(b) -> X][T flag]
                 var t_patches = std.ArrayList(usize).empty;
-                try self.branchFalse(o.lhs, &t_patches, line, col);
-                var t_jmp: usize = undefined;
-                try self.gatedJmp(&t_jmp);
-                try self.branchTrue(o.rhs, patches, line, col);
+                try self.emitTrueExit(o.lhs, &t_patches, line, col);
+                try self.emitFalseExit(o.rhs, patches, line, col);
                 const t_slot = try self.flag(line, col);
-                self.patchJmp(t_jmp, t_slot);
                 for (t_patches.items) |idx| self.patchJmp(idx, t_slot);
             },
         }
     }
 
-    fn branchFalse(self: *Codegen, c: *const Cond, patches: *std.ArrayList(usize), line: u32, col: u32) Error!void {
+    /// Dual of emitFalseExit: `patches` fire iff cond HOLDS
+    /// (they skip the else-branch); fall-through means cond is false.
+    fn emitTrueExit(self: *Codegen, c: *const Cond, patches: *std.ArrayList(usize), line: u32, col: u32) Error!void {
         switch (c.*) {
             .truthy => |e| {
                 // !(e != 0) is e == 0
@@ -314,24 +315,29 @@ pub const Codegen = struct {
                     .keep => try self.expandCmp(inverted, cm.lhs, cm.rhs, patches, line, col),
                 }
             },
-            .not_cond => |inner| try self.branchTrue(inner, patches, line, col),
+            .not_cond => |inner| try self.emitFalseExit(inner, patches, line, col),
             .and_cond => |a| {
-                // !(a && b) == !a || !b: sequential free lowering
-                try self.branchTrue(a.lhs, patches, line, col);
-                try self.branchTrue(a.rhs, patches, line, col);
+                // (a && b) holds iff both hold: [JF(a)][JT(b) -> X][T flag]
+                var t_patches = std.ArrayList(usize).empty;
+                try self.emitFalseExit(a.lhs, &t_patches, line, col);
+                try self.emitTrueExit(a.rhs, patches, line, col);
+                const t_slot = try self.flag(line, col);
+                for (t_patches.items) |idx| self.patchJmp(idx, t_slot);
             },
             .or_cond => |o| {
-                // !(a || b) == !a && !b: sequential free lowering
-                try self.branchFalse(o.lhs, patches, line, col);
-                try self.branchFalse(o.rhs, patches, line, col);
+                // (a || b) holds iff either holds: sequential free lowering
+                try self.emitTrueExit(o.lhs, patches, line, col);
+                try self.emitTrueExit(o.rhs, patches, line, col);
             },
         }
     }
 
     fn uncondPatch(self: *Codegen, patches: *std.ArrayList(usize)) Error!void {
+        // Unconditional post-boot exit. (A bare gatedJmp never fires:
+        // its lda_imm 1 forces acc = 1, so ifgt PHASE always skips.)
         var idx: usize = undefined;
 
-        try self.gatedJmp(&idx);
+        try self.phaseJump(&idx);
         try patches.append(self.alloc, idx);
     }
 
@@ -603,10 +609,12 @@ pub const Codegen = struct {
         }
     }
 
-    fn jumpIfTrue(self: *Codegen, cond: *const Cond, line: u32, col: u32) Error!std.ArrayList(usize) {
+    /// Entry for if statements: patches jump past the then-branch, so
+    /// they fire iff cond is FALSE.
+    fn jumpIfFalse(self: *Codegen, cond: *const Cond, line: u32, col: u32) Error!std.ArrayList(usize) {
         var patches = std.ArrayList(usize).empty;
 
-        try self.branchTrue(cond, &patches, line, col);
+        try self.emitFalseExit(cond, &patches, line, col);
 
         return patches;
     }
@@ -614,13 +622,13 @@ pub const Codegen = struct {
     fn ifStmt(self: *Codegen, cond: *const Cond, then_s: *const Stmt, else_s: ?*const Stmt, line: u32, col: u32) Error!void {
         if (else_s) |e| {
             // [test][G jmp B][THEN][G jmp J][B flag][ELSE][J flag]
-            const patches = try self.jumpIfTrue(cond, line, col);
+            const patches = try self.jumpIfFalse(cond, line, col);
 
             try self.stmt(then_s);
 
             var join_patch: usize = undefined;
 
-            try self.gatedJmp(&join_patch);
+            try self.phaseJump(&join_patch);
 
             const else_slot = try self.flag(e.line, e.col);
 
@@ -633,7 +641,7 @@ pub const Codegen = struct {
             self.patchJmp(join_patch, join_slot);
         } else {
             // [test][G jmp J][THEN][J flag]
-            const patches = try self.jumpIfTrue(cond, line, col);
+            const patches = try self.jumpIfFalse(cond, line, col);
 
             try self.stmt(then_s);
 
