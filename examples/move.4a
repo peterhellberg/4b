@@ -23,21 +23,7 @@ sta r5          ; handler marker (cleared)
 
 @hL:            ; x-- (mod 16)
   lda r0
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
+  dec
   sta r0
   lda r5
   ifeq r7
@@ -53,21 +39,7 @@ sta r5          ; handler marker (cleared)
 
 @hU:            ; y-- (mod 16)
   lda r1
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
-  inc
+  dec
   sta r1
   lda r5
   ifeq r7
