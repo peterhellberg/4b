@@ -33,6 +33,10 @@ pub fn assemble(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) Asse
     if (diag.hasErrors()) return error.AssembleFailed;
 
     var image: Image = undefined;
+    if (words.items.len > rom.IMAGE_WORDS) {
+        diag.err(1, 1, "program too long (exceeds 256 instructions)", .{});
+        return error.AssembleFailed;
+    }
     rom.pack(words.items, &image);
 
     return image;
@@ -41,9 +45,10 @@ pub fn assemble(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) Asse
 /// Assemble 4A source into a 384-byte ROM image (C-ABI entry point used
 /// when the assembler is embedded in the 4b box).
 ///
-/// Returns 0 and fills `out` on success. On failure returns 1 and, when
-/// `err_buf` is non-null, writes diagnostics ("path:line:col: error: msg\n"
-/// per error, NUL-terminated, truncated to fit).
+/// `out` must point to at least 384 bytes. Returns 0 and fills `out` on
+/// success. On failure returns 1 and, when `err_buf` is non-null, writes
+/// diagnostics ("path:line:col: error: msg\n" per error, NUL-terminated,
+/// truncated to fit).
 export fn fourb_assemble(
     path: [*:0]const u8,
     src: [*]const u8,
@@ -255,4 +260,17 @@ test "negative: reserved const name" {
 
 test "negative: duplicate const" {
     try assembleExpectError(neg_dup_const, "duplicate");
+}
+
+test "negative: program too long" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const alloc = arena.allocator();
+
+    var src = std.ArrayList(u8).empty;
+    var i: usize = 0;
+    while (i < 257) : (i += 1) try src.appendSlice(alloc, "nop\n");
+
+    try assembleExpectError(src.items, "too long");
 }
