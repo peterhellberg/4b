@@ -64,6 +64,12 @@ jobs:
       - name: Build examples
         run: zig build examples
 
+      - name: Install box system libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl-dev libx11-dev libxrandr-dev \
+            libxinerama-dev libxi-dev libxcursor-dev
+
       # The test and examples steps only touch the 4a/4c tools; build
       # everything (including the 4b box with its C and raylib sources)
       # so box/C-ABI drift fails here instead of only locally.
