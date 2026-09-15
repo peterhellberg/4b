@@ -95,7 +95,9 @@ pub const Semer = struct {
     alloc: std.mem.Allocator,
     diag: *dia.Diag,
     consts: std.StringHashMapUnmanaged(u4),
-    scopes: std.ArrayList(Scope) = .empty,
+    // Single scope: all declarations are global and shadowing is
+    // rejected, so per-block scopes would never hold anything.
+    scope: Scope = .{},
     next_reg: u8 = 0,
     loop_depth: usize = 0,
 
@@ -104,40 +106,24 @@ pub const Semer = struct {
         return error.SemaError;
     }
 
-    fn pushScope(self: *Semer) Error!void {
-        try self.scopes.append(self.alloc, .{});
-    }
-
-    fn popScope(self: *Semer) void {
-        _ = self.scopes.pop();
-    }
-
     fn declareVar(self: *Semer, name: []const u8, line: u32, col: u32) Error!u8 {
         if (isReserved(name)) {
             return self.err(line, col, "'{s}' is reserved", .{name});
         }
-        var i = self.scopes.items.len;
-        while (i > 0) {
-            i -= 1;
-            if (self.scopes.items[i].contains(name)) {
-                return self.err(line, col, "duplicate or shadowed declaration '{s}'", .{name});
-            }
+        if (self.scope.contains(name)) {
+            return self.err(line, col, "duplicate or shadowed declaration '{s}'", .{name});
         }
         if (self.next_reg >= isa.SCRATCH) {
             return self.err(line, col, "too many variables (maximum 13)", .{});
         }
         const reg = self.next_reg;
         self.next_reg += 1;
-        try self.scopes.items[self.scopes.items.len - 1].put(self.alloc, name, .{ .variable = reg });
+        try self.scope.put(self.alloc, name, .{ .variable = reg });
         return reg;
     }
 
     fn lookup(self: *Semer, name: []const u8, line: u32, col: u32) Error!Symbol {
-        var i = self.scopes.items.len;
-        while (i > 0) {
-            i -= 1;
-            if (self.scopes.items[i].get(name)) |sym| return sym;
-        }
+        if (self.scope.get(name)) |sym| return sym;
         return self.err(line, col, "undeclared identifier '{s}'", .{name});
     }
 
@@ -155,11 +141,7 @@ pub const Semer = struct {
             .variable => |name| {
                 if (self.consts.get(name)) |v| return v;
                 // distinguish unknown vs non-const variable
-                var found = false;
-                for (self.scopes.items) |sc| {
-                    if (sc.contains(name)) found = true;
-                }
-                if (found) {
+                if (self.scope.contains(name)) {
                     return self.err(e.span.line, e.span.col, "'{s}' is not a compile-time constant", .{name});
                 }
                 return self.err(e.span.line, e.span.col, "undeclared identifier '{s}'", .{name});
@@ -373,8 +355,6 @@ pub const Semer = struct {
     fn convStmt(self: *Semer, s: *ast.Stmt) Error!*Stmt {
         const out: StmtKind = switch (s.kind) {
             .block => |stmts| blk: {
-                try self.pushScope();
-                defer self.popScope();
                 var list = std.ArrayList(*Stmt).empty;
                 for (stmts) |one| {
                     try list.append(self.alloc, try self.convStmt(one));
@@ -440,7 +420,6 @@ pub const Semer = struct {
     }
 
     pub fn run(self: *Semer, prog: *ast.Program) Error!Prog {
-        try self.pushScope(); // globals
 
         var slots = std.ArrayList(VarSlot).empty;
 
@@ -451,12 +430,12 @@ pub const Semer = struct {
                     if (isReserved(cd.name)) {
                         return self.err(cd.span.line, cd.span.col, "'{s}' is reserved", .{cd.name});
                     }
-                    if (self.consts.contains(cd.name) or self.scopes.items[0].contains(cd.name)) {
+                    if (self.consts.contains(cd.name) or self.scope.contains(cd.name)) {
                         return self.err(cd.span.line, cd.span.col, "duplicate declaration '{s}'", .{cd.name});
                     }
                     const v = try self.evalConst(cd.value_expr, 0);
                     try self.consts.put(self.alloc, cd.name, v);
-                    try self.scopes.items[0].put(self.alloc, cd.name, .{ .constant = v });
+                    try self.scope.put(self.alloc, cd.name, .{ .constant = v });
                 },
                 .var_decl => {},
             }
@@ -479,8 +458,6 @@ pub const Semer = struct {
 
         // main body in the global scope
         const body = try self.convStmt(prog.main_body);
-
-        self.popScope();
 
         return .{ .vars = slots.items, .body = body };
     }
