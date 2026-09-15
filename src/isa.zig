@@ -43,15 +43,20 @@ pub const Spec = struct {
     b: OperandKind,
 };
 
-/// One mnemonic per spec; "lda" always parses as .lda_mem and codegen
-/// rewrites it to .lda_imm when the operand is `#imm` (or `#CONST`).
-/// There is deliberately no separate "lda" entry for opcode 0x3.
+/// One mnemonic per spec, except the inc/dec pair below; "lda" always
+/// parses as .lda_mem and codegen rewrites it to .lda_imm when the
+/// operand is `#imm` (or `#CONST`). There is deliberately no separate
+/// "lda" entry for opcode 0x3.
 pub const specs = [_]Spec{
     .{ .mnemonic = "nop", .op = .nop, .a = .none, .b = .none },
     .{ .mnemonic = "lda", .op = .lda_mem, .a = .reg_or_imm, .b = .none },
     .{ .mnemonic = "sta", .op = .sta, .a = .reg, .b = .none },
     .{ .mnemonic = "read", .op = .read, .a = .none, .b = .none },
     .{ .mnemonic = "inc", .op = .inc, .a = .none, .b = .none },
+    // Local 4b extension sharing opcode 0x5: a == 1 selects decrement
+    // (see the VM). Codegen sets a = 1 for this entry; the bare "inc"
+    // entry above always encodes a == 0.
+    .{ .mnemonic = "dec", .op = .inc, .a = .none, .b = .none },
     .{ .mnemonic = "cls", .op = .cls, .a = .none, .b = .none },
     .{ .mnemonic = "shl", .op = .shl, .a = .none, .b = .none },
     .{ .mnemonic = "shr", .op = .shr, .a = .none, .b = .none },
@@ -135,18 +140,29 @@ pub fn decode(word: u16) Decoded {
     };
 }
 
-test "all 16 opcodes covered exactly once" {
+test "all 16 opcodes covered, inc shared with dec" {
     var seen: [16]bool = @splat(false);
+    var dups: usize = 0;
     for (specs) |s| {
         const i: usize = @intFromEnum(s.op);
-        try std.testing.expect(!seen[i]);
+        if (seen[i]) dups += 1;
         seen[i] = true;
     }
-    // Only lda_imm shares its mnemonic; every other opcode has a spec.
+    // Only lda_imm shares its mnemonic; every other opcode has a spec,
+    // and exactly one opcode (inc/dec, 0x5) has two spellings.
     for (seen, 0..) |s, i| {
         if (i == @intFromEnum(Op.lda_imm)) continue;
         try std.testing.expect(s);
     }
+    try std.testing.expectEqual(1, dups);
+}
+
+test "lookupSpec finds dec, sharing opcode 0x5 with inc" {
+    const dec = lookupSpec("DEC").?;
+    try std.testing.expectEqual(Op.inc, dec.op);
+    try std.testing.expectEqualStrings("dec", dec.mnemonic);
+    try std.testing.expectEqual(0x510, encode(dec.op, 1, 0));
+    try std.testing.expectEqual(Op.inc, lookupSpec("inc").?.op);
 }
 
 test "lookupSpec is case-insensitive" {
