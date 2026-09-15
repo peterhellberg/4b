@@ -80,3 +80,14 @@ jobs:
       # so box/C-ABI drift fails here instead of only locally.
       - name: Build all
         run: zig build --summary all
+
+      # Run the freshly built box headless: no display needed, and it
+      # exercises ROM loading, the embedded assembler/compiler, tick
+      # and dump paths end to end.
+      - name: Smoke-test box headless
+        run: |
+          for rom in examples/*.4b; do
+            ./zig-out/bin/4b -d 100 "$rom" > /dev/null
+          done
+          ./zig-out/bin/4b -d 100 examples/move.4c > /dev/null
+          ./zig-out/bin/4b -d 100 examples/fill.4a > /dev/null
