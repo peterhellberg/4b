@@ -70,6 +70,8 @@ fully succeeds. The `-o` prefix form (`-ofile`) works as in `4a`.
       emit_asm.zig words -> .4a text
     rom.zig        reused as-is: pack(words) -> [384]u8
     dia.zig        reused as-is: Diag with line/col + caret snippets
+    (the shared 4a pipeline — lexer/parser/isa/symbols/codegen — lives
+    alongside; see docs/4AD.md §5 for the full src layout)
   examples/*.4c    demo programs (added with the implementation)
   docs/            4BoD.md, 4AL.md, 4AD.md, 4CL.md, 4CD.md (this doc)
 ```
@@ -158,11 +160,12 @@ pub const Cond = union(enum) {
 
 pub const Stmt = union(enum) {
     assign: struct { target: Spanned([]const u8), op: AssignOp, value: *Expr },
-    iff: struct { cond: *Cond, then: *Stmt, els: ?*Stmt },
-    whil: struct { cond: *Cond, body: *Stmt },
+    if_stmt: struct { cond: *Cond, then_stmt: *Stmt, else_stmt: ?*Stmt },
+    for_stmt: struct { body: *Stmt },
     brk, cont,
-    call: VoidCall,                                // cls flip halt
+    voidcall: VoidCall,                          // cls flip halt
     block: []Stmt,
+    empty,
 };
 ```
 
@@ -175,7 +178,7 @@ Sema walks the program once and produces the analyzed form:
 
 1. **Declarations.** Collect consts (`name -> u4 value`) and variables
    (`name -> register index`, declaration order). Duplicate names, names
-   colliding with keywords/builtins, and more than 14 variables are errors.
+    colliding with keywords/builtins, and more than 13 variables are errors.
 2. **Constant folding.** Global initializers must fold to literals using
    only literals and consts. Folding is applied everywhere opportunistically;
    folded leaves are marked so codegen takes the cheap path. Constant
