@@ -65,3 +65,19 @@ fn mnemonic(op: isa.Op) []const u8 {
 fn writeReg(w: *std.Io.Writer, reg: u4) (std.mem.Allocator.Error || std.Io.Writer.Error)!void {
     try w.print("r{d}", .{reg});
 }
+
+test "round-trip every opcode" {
+    const alloc = std.testing.allocator;
+    const ops = [_]isa.Op{
+        .nop,  .lda_mem, .sta,  .lda_imm, .read, .inc,  .cls,  .shl, .shr,
+        .peek, .flip,    .flag, .jmp,     .ifeq, .ifgt, .iflt,
+    };
+    for (ops) |op| {
+        const words = [_]u16{isa.encode(op, 1, 2)};
+        var text = std.ArrayList(u8).empty;
+        defer text.deinit(alloc);
+        try write(alloc, &words, &text);
+        try std.testing.expect(text.items.len > "nop\n".len);
+        try std.testing.expect(std.mem.startsWith(u8, text.items, mnemonic(op)));
+    }
+}
