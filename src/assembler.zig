@@ -262,6 +262,22 @@ test "negative: duplicate const" {
     try assembleExpectError(neg_dup_const, "duplicate");
 }
 
+test "const substitution" {
+    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arena.deinit();
+
+    const alloc = arena.allocator();
+
+    var diag = dia.Diag.init(alloc, "<test>", "const N = 8\nlda #N\n");
+    const image = try assemble(alloc, &diag, "const N = 8\nlda #N\n");
+    try std.testing.expectEqual(@as(usize, 0), diag.errors.items.len);
+    // lda #8 -> 0x380, same bytes as the pack unit test.
+    try std.testing.expectEqual(@as(u8, 0x80), image[0]);
+    try std.testing.expectEqual(@as(u8, 0x03), image[1]);
+
+    try assembleExpectError("lda #NOPE\n", "undefined const");
+}
+
 test "negative: program too long" {
     var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arena.deinit();

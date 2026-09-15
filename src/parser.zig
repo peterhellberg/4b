@@ -155,6 +155,28 @@ fn parseStatement(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Tok
     } });
 }
 
+fn parseHashOperand(tokens: []const Token, idx: *usize, diag: *dia.Diag) ?Operand {
+    idx.* += 1; // consume '#'
+    const tok = peek(tokens, idx.*);
+
+    if (tok.kind == .number) {
+        idx.* += 1;
+        if (tok.value > 15) {
+            diag.err(tok.line, tok.col, "immediate value out of range (0-15)", .{});
+            return null;
+        }
+        return .{ .imm = @intCast(tok.value) };
+    }
+
+    if (tok.kind == .ident) {
+        idx.* += 1;
+        return .{ .const_ref = tok.text };
+    }
+
+    diag.err(tok.line, tok.col, "expected immediate value or const name after '#'", .{});
+    return null;
+}
+
 fn parseOperand(tokens: []const Token, idx: *usize, kind: isa.OperandKind, diag: *dia.Diag) ?Operand {
     const tok = peek(tokens, idx.*);
 
@@ -182,17 +204,7 @@ fn parseOperand(tokens: []const Token, idx: *usize, kind: isa.OperandKind, diag:
         },
         .imm => {
             if (tok.kind == .hash) {
-                idx.* += 1;
-
-                const val_tok = expectToken(tokens, idx, .number, diag, "expected immediate value after '#'") orelse return null;
-
-                if (val_tok.value > 15) {
-                    diag.err(val_tok.line, val_tok.col, "immediate value out of range (0-15)", .{});
-
-                    return null;
-                }
-
-                return .{ .imm = @intCast(val_tok.value) };
+                return parseHashOperand(tokens, idx, diag);
             }
 
             diag.err(tok.line, tok.col, "expected '#value' for immediate operand", .{});
@@ -201,17 +213,7 @@ fn parseOperand(tokens: []const Token, idx: *usize, kind: isa.OperandKind, diag:
         },
         .reg_or_imm => {
             if (tok.kind == .hash) {
-                idx.* += 1;
-
-                const val_tok = expectToken(tokens, idx, .number, diag, "expected immediate value after '#'") orelse return null;
-
-                if (val_tok.value > 15) {
-                    diag.err(val_tok.line, val_tok.col, "immediate value out of range (0-15)", .{});
-
-                    return null;
-                }
-
-                return .{ .imm = @intCast(val_tok.value) };
+                return parseHashOperand(tokens, idx, diag);
             }
             if (tok.kind == .ident) {
                 if (parseRegisterIndex(tok.text)) |reg_idx| {

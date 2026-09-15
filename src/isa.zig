@@ -63,6 +63,7 @@ pub fn lookupSpec(name: []const u8) ?Spec {
 pub const Operand = union(enum) {
     reg: u4,
     imm: u4,
+    const_ref: []const u8,
     label_ref: []const u8,
     flag_slot: u4,
 };
