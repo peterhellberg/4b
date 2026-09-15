@@ -455,7 +455,6 @@ pub const Codegen = struct {
 
                         _ = try self.w(.lda_imm, 0, 0);
 
-
                         _ = try self.w(.sta, r, 0);
 
                         try self.mutateLoop(r, @intCast(vr), .sub, line, col);
@@ -495,7 +494,6 @@ pub const Codegen = struct {
                             var i: u4 = 0;
 
                             while (i < n) : (i += 1) _ = try self.w(.inc, 0, 0);
-
 
                             _ = try self.w(.sta, r, 0);
                         }
