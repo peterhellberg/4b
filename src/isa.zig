@@ -27,6 +27,15 @@ pub const OperandKind = enum {
     label_or_slot,
 };
 
+/// Register roles shared by the 4c backend: sema allocates variables
+/// below SCRATCH, codegen reserves the top three (see docs/4CL.md §6.1).
+pub const SCRATCH: u4 = 13;
+pub const ZERO: u4 = 14;
+pub const PHASE: u4 = 15;
+
+/// Flag slots 0..14 are usable; slot 15 is reserved (hardware bug).
+pub const MAX_SLOTS: usize = 15;
+
 pub const Spec = struct {
     mnemonic: []const u8,
     op: Op,

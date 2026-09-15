@@ -1,6 +1,7 @@
 const std = @import("std");
 const ast = @import("ast.zig");
 const dia = @import("dia");
+const isa = @import("isa");
 
 pub const Error = error{ SemaError, OutOfMemory };
 
@@ -122,7 +123,7 @@ pub const Semer = struct {
                 return self.err(line, col, "duplicate or shadowed declaration '{s}'", .{name});
             }
         }
-        if (self.next_reg >= 13) {
+        if (self.next_reg >= isa.SCRATCH) {
             return self.err(line, col, "too many variables (maximum 13)", .{});
         }
         const reg = self.next_reg;

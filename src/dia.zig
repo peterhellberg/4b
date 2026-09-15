@@ -1,5 +1,8 @@
 const std = @import("std");
 
+/// Maximum source file size accepted by the 4a/4c CLI drivers.
+pub const max_src_bytes: usize = 1 << 20;
+
 pub const Error = struct {
     msg: []const u8,
     line: u32,

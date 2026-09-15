@@ -1,6 +1,7 @@
 const std = @import("std");
 const dia = @import("dia");
 const isa = @import("isa");
+const rom = @import("rom");
 const sema = @import("sema.zig");
 
 const Expr = sema.Expr;
@@ -9,12 +10,12 @@ const Stmt = sema.Stmt;
 
 pub const Error = error{ CodegenError, OutOfMemory };
 
-pub const SCRATCH: u4 = 13;
-pub const ZERO: u4 = 14;
-pub const PHASE: u4 = 15;
-
-/// Slots 0..14 are usable; slot 15 is reserved (hardware bug).
-pub const MAX_SLOTS: usize = 15;
+// Register roles and slot limit live in isa (single home); sema uses
+// the same constants when allocating variables.
+pub const SCRATCH = isa.SCRATCH;
+pub const ZERO = isa.ZERO;
+pub const PHASE = isa.PHASE;
+pub const MAX_SLOTS = isa.MAX_SLOTS;
 
 pub const SlotInfo = struct { line: u32, col: u32 };
 
@@ -43,7 +44,7 @@ pub const Codegen = struct {
     }
 
     fn w(self: *Codegen, op: isa.Op, a: u4, b: u4) Error!usize {
-        if (self.words.items.len >= 256) {
+        if (self.words.items.len >= rom.IMAGE_WORDS) {
             return self.err(1, 1, "program exceeds 256 words", .{});
         }
 
