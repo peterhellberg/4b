@@ -188,26 +188,65 @@ static void trace_tick(const VM *vm, long n) {
   printf("%4ld: pc=%3u acc=%u\n", n, vm->pc, vm->acc);
 }
 
-int main(int argc, char **argv) {
-  const char *rom_path = NULL;
-  int scale = DEFAULT_SCALE;
-  int speed = DEFAULT_SPEED;
-  long debug_steps = -1;
-  unsigned buttons_mask = 0;
-  int trace = 0;
-  Color fg = {0xd3, 0xc9, 0xa1, 255};
-  Color bg = {0x32, 0x3c, 0x39, 255};
-  bool help = false;
+typedef struct {
+  const char *rom_path;
+  int scale;
+  int speed;
+  long debug_steps;
+  unsigned buttons_mask;
+  int trace;
+  Color fg;
+  Color bg;
+  bool help;
+} Options;
+
+static void print_usage(void) {
+  fprintf(stderr, "Usage: 4b [options] <rom.4b | source.4a | source.4c>\n");
+  fprintf(stderr, "\n");
+  fprintf(stderr, "Options:\n");
+  fprintf(stderr,
+          "  -d, --debug N       run N instructions headless, then dump state\n");
+  fprintf(stderr,
+          "  -B, --buttons M     held-button mask for the debug run\n");
+  fprintf(stderr,
+          "  -t, --trace         print pc/acc before every tick (with -d)\n");
+  fprintf(stderr, "  -s, --scale N       window scale %d-%d (default %d)\n",
+          MIN_SCALE, MAX_SCALE, DEFAULT_SCALE);
+  fprintf(stderr,
+          "  -n, --speed N       instructions per frame (default %d)\n",
+          DEFAULT_SPEED);
+  fprintf(stderr, "  -p, --palette NAME  use a named palette\n");
+  fprintf(stderr, "  -f, --fg COLOR      foreground color as R,G,B or hex "
+                  "(default d3c9a1)\n");
+  fprintf(stderr, "  -b, --bg COLOR      background color as R,G,B or hex "
+                  "(default 323c39)\n");
+  fprintf(stderr, "  -h, --help          print usage and exit\n");
+  fprintf(stderr, "\nA .4a source file is assembled and a .4c source file"
+                  " is compiled at startup.\n");
+}
+
+/* Parse argv into opts. Returns 0 to continue, 1 after printing an
+ * error, or 2 when the answer is already printed (exit 0). */
+static int parse_args(int argc, char **argv, Options *opts) {
+  opts->rom_path = NULL;
+  opts->scale = DEFAULT_SCALE;
+  opts->speed = DEFAULT_SPEED;
+  opts->debug_steps = -1;
+  opts->buttons_mask = 0;
+  opts->trace = 0;
+  opts->fg = (Color){0xd3, 0xc9, 0xa1, 255};
+  opts->bg = (Color){0x32, 0x3c, 0x39, 255};
+  opts->help = false;
 
   for (int i = 1; i < argc; i++) {
     if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
-      help = true;
+      opts->help = true;
     else if ((strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--scale") == 0) &&
              i + 1 < argc)
-      scale = atoi(argv[++i]);
+      opts->scale = atoi(argv[++i]);
     else if ((strcmp(argv[i], "-n") == 0 || strcmp(argv[i], "--speed") == 0) &&
              i + 1 < argc)
-      speed = atoi(argv[++i]);
+      opts->speed = atoi(argv[++i]);
     else if ((strcmp(argv[i], "-d") == 0 ||
               strcmp(argv[i], "--debug") == 0)) {
       if (i + 1 >= argc) {
@@ -218,19 +257,19 @@ int main(int argc, char **argv) {
 
       char *end = NULL;
 
-      debug_steps = strtol(argv[++i], &end, 10);
+      opts->debug_steps = strtol(argv[++i], &end, 10);
 
-      if (end == argv[i] || *end != '\0' || debug_steps < 0) {
+      if (end == argv[i] || *end != '\0' || opts->debug_steps < 0) {
         fprintf(stderr, "4b: invalid step count: %s\n", argv[i]);
 
         return 1;
       }
     } else if (strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--trace") == 0) {
-      trace = 1;
+      opts->trace = 1;
     } else if ((strcmp(argv[i], "-B") == 0 ||
                 strcmp(argv[i], "--buttons") == 0) &&
                i + 1 < argc)
-      buttons_mask = (unsigned)strtoul(argv[++i], NULL, 0) & 0xF;
+      opts->buttons_mask = (unsigned)strtoul(argv[++i], NULL, 0) & 0xF;
     else if ((strcmp(argv[i], "-p") == 0 ||
               strcmp(argv[i], "--palette") == 0)) {
       if (i + 1 >= argc || argv[i + 1][0] == '-') {
@@ -239,7 +278,7 @@ int main(int argc, char **argv) {
         for (size_t j = 0; j < sizeof(PALETTES) / sizeof(PALETTES[0]); j++)
           fprintf(stderr, "  %s\n", PALETTES[j].name);
 
-        return 0;
+        return 2;
       }
       const Palette *p = find_palette(argv[++i]);
       if (!p) {
@@ -252,11 +291,11 @@ int main(int argc, char **argv) {
         return 1;
       }
 
-      fg = p->fg;
-      bg = p->bg;
+      opts->fg = p->fg;
+      opts->bg = p->bg;
     } else if ((strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--fg") == 0) &&
                i + 1 < argc) {
-      if (!parse_color(argv[++i], &fg)) {
+      if (!parse_color(argv[++i], &opts->fg)) {
         fprintf(stderr, "4b: invalid color: %s (expected R,G,B or hex)\n",
                 argv[i]);
 
@@ -264,69 +303,33 @@ int main(int argc, char **argv) {
       }
     } else if ((strcmp(argv[i], "-b") == 0 || strcmp(argv[i], "--bg") == 0) &&
                i + 1 < argc) {
-      if (!parse_color(argv[++i], &bg)) {
+      if (!parse_color(argv[++i], &opts->bg)) {
         fprintf(stderr, "4b: invalid color: %s (expected R,G,B or hex)\n",
                 argv[i]);
 
         return 1;
       }
     } else if (argv[i][0] != '-') {
-      if (rom_path) {
+      if (opts->rom_path) {
         fprintf(stderr, "4b: multiple input files\n");
         return 1;
       }
-      rom_path = argv[i];
+      opts->rom_path = argv[i];
     } else {
       fprintf(stderr, "4b: unknown option: %s\n", argv[i]);
       return 1;
     }
   }
 
-  if (help || !rom_path) {
-    fprintf(stderr, "Usage: 4b [options] <rom.4b | source.4a | source.4c>\n");
-    fprintf(stderr, "\n");
-    fprintf(stderr, "Options:\n");
-    fprintf(stderr,
-            "  -d, --debug N       run N instructions headless, then dump state\n");
-    fprintf(stderr,
-            "  -B, --buttons M     held-button mask for the debug run\n");
-    fprintf(stderr,
-            "  -t, --trace         print pc/acc before every tick (with -d)\n");
-    fprintf(stderr,
-            "  -s, --scale N       window scale %d-%d (default %d)\n",
-            MIN_SCALE, MAX_SCALE,
-            DEFAULT_SCALE);
-    fprintf(stderr,
-            "  -n, --speed N       instructions per frame (default %d)\n",
-            DEFAULT_SPEED);
-    fprintf(stderr, "  -p, --palette NAME  use a named palette\n");
-    fprintf(stderr,
-            "  -f, --fg COLOR      foreground color as R,G,B or hex "
-            "(default d3c9a1)\n");
-    fprintf(stderr,
-            "  -b, --bg COLOR      background color as R,G,B or hex "
-            "(default 323c39)\n");
-    fprintf(stderr, "  -h, --help          print usage and exit\n");
-    fprintf(stderr, "\nA .4a source file is assembled and a .4c source file"
-                    " is compiled at startup.\n");
+  return 0;
+}
 
-    return help ? 0 : 1;
-  }
-
-  if (scale < MIN_SCALE)
-    scale = MIN_SCALE;
-
-  if (scale > MAX_SCALE)
-    scale = MAX_SCALE;
-
-  if (speed < 1)
-    speed = 1;
-
-  static uint8_t assembled[ROM_SIZE];
-  size_t rom_len;
-  uint8_t *rom;
-  int heap_rom = 0;
-
+/* Load a ROM file, or assemble/compile a source file with the embedded
+ * toolchain. On success sets *rom/*rom_len/*heap_rom and returns 0
+ * (heap_rom is 1 when *rom must be freed by the caller). Prints an
+ * error and returns 1 on failure. */
+static int load_rom(const char *rom_path, uint8_t *assembled,
+                    const uint8_t **rom, size_t *rom_len, int *heap_rom) {
   if (ends_with(rom_path, ".4a") || ends_with(rom_path, ".4c")) {
     /* Source file: assemble/compile with the embedded toolchain. */
     int is_4c = ends_with(rom_path, ".4c");
@@ -355,56 +358,52 @@ int main(int argc, char **argv) {
 
     free(src);
 
-    rom = assembled;
-    rom_len = ROM_SIZE;
-    heap_rom = 0;
-  } else {
-    rom = read_file(rom_path, &rom_len);
-    heap_rom = 1;
-    if (!rom) {
-      fprintf(stderr, "4b: cannot read %s\n", rom_path);
-
-      return 1;
-    }
-
-    if (rom_len != ROM_SIZE) {
-      fprintf(stderr, "4b: %s: expected %d bytes, got %zu\n", rom_path,
-              ROM_SIZE, rom_len);
-      free(rom);
-
-      return 1;
-    }
-  }
-
-  if (trace && debug_steps < 0) {
-    fprintf(stderr, "4b: -t/--trace requires -d/--debug N\n");
-
-    return 1;
-  }
-
-  VM vm;
-
-  fourb_vm_load_rom(&vm, rom, rom_len);
-
-  if (debug_steps >= 0) {
-    /* Headless debug run: hold the given button mask, tick N times, dump. */
-    for (long s = 0; s < debug_steps; s++) {
-      vm.buttons = (uint8_t)buttons_mask;
-
-      if (trace)
-        trace_tick(&vm, s);
-
-      fourb_vm_tick(&vm);
-    }
-
-    dump_vm(&vm, debug_steps, buttons_mask);
-
-    if (heap_rom)
-      free(rom);
+    *rom = assembled;
+    *rom_len = ROM_SIZE;
+    *heap_rom = 0;
 
     return 0;
   }
 
+  uint8_t *file_rom = read_file(rom_path, rom_len);
+  *heap_rom = 1;
+  if (!file_rom) {
+    fprintf(stderr, "4b: cannot read %s\n", rom_path);
+
+    return 1;
+  }
+
+  if (*rom_len != ROM_SIZE) {
+    fprintf(stderr, "4b: %s: expected %d bytes, got %zu\n", rom_path,
+            ROM_SIZE, *rom_len);
+    free(file_rom);
+
+    return 1;
+  }
+
+  *rom = file_rom;
+
+  return 0;
+}
+
+/* Headless debug run: hold the button mask, tick N times, dump state. */
+static int run_headless(VM *vm, const Options *opts) {
+  for (long s = 0; s < opts->debug_steps; s++) {
+    vm->buttons = (uint8_t)opts->buttons_mask;
+
+    if (opts->trace)
+      trace_tick(vm, s);
+
+    fourb_vm_tick(vm);
+  }
+
+  dump_vm(vm, opts->debug_steps, opts->buttons_mask);
+
+  return 0;
+}
+
+static int run_gui(VM *vm, const char *rom_path, const uint8_t *rom,
+                   size_t rom_len, const Options *opts) {
   SetTraceLogLevel(LOG_ERROR);
 
   const char *base = strrchr(rom_path, '/');
@@ -429,7 +428,7 @@ int main(int argc, char **argv) {
   char title[268];
   snprintf(title, sizeof(title), "4b: %s", stem);
 
-  InitWindow(SCREEN_W * scale, SCREEN_H * scale, title);
+  InitWindow(SCREEN_W * opts->scale, SCREEN_H * opts->scale, title);
   SetTargetFPS(60);
 
   while (!WindowShouldClose()) {
@@ -440,11 +439,11 @@ int main(int argc, char **argv) {
         SetWindowSize(GetMonitorWidth(GetCurrentMonitor()),
                       GetMonitorHeight(GetCurrentMonitor()));
       else
-        SetWindowSize(SCREEN_W * scale, SCREEN_H * scale);
+        SetWindowSize(SCREEN_W * opts->scale, SCREEN_H * opts->scale);
     }
 
     if (IsKeyPressed(KEY_R))
-      fourb_vm_load_rom(&vm, rom, rom_len);
+      fourb_vm_load_rom(vm, rom, rom_len);
 
     uint8_t btns = 0;
 
@@ -457,22 +456,22 @@ int main(int argc, char **argv) {
     if (IsKeyDown(KEY_DOWN))
       btns |= 8;
 
-    vm.buttons = btns;
+    vm->buttons = btns;
 
-    for (int i = 0; i < speed; i++)
-      fourb_vm_tick(&vm);
+    for (int i = 0; i < opts->speed; i++)
+      fourb_vm_tick(vm);
 
     int px = GetScreenHeight() / SCREEN_H;
     int ox = (GetScreenWidth() - SCREEN_W * px) / 2;
     int oy = (GetScreenHeight() - SCREEN_H * px) / 2;
 
     BeginDrawing();
-    ClearBackground(bg);
+    ClearBackground(opts->bg);
 
     for (int y = 0; y < SCREEN_H; y++)
       for (int x = 0; x < SCREEN_W; x++)
-        if (vm.screen[y * SCREEN_W + x])
-          DrawRectangle(ox + x * px, oy + y * px, px, px, fg);
+        if (vm->screen[y * SCREEN_W + x])
+          DrawRectangle(ox + x * px, oy + y * px, px, px, opts->fg);
 
     EndDrawing();
   }
@@ -480,4 +479,60 @@ int main(int argc, char **argv) {
   CloseWindow();
 
   return 0;
+}
+
+int main(int argc, char **argv) {
+  Options opts;
+
+  int arg_rc = parse_args(argc, argv, &opts);
+  if (arg_rc == 2)
+    return 0;
+  if (arg_rc != 0)
+    return arg_rc;
+
+  if (opts.help || !opts.rom_path) {
+    print_usage();
+
+    return opts.help ? 0 : 1;
+  }
+
+  if (opts.scale < MIN_SCALE)
+    opts.scale = MIN_SCALE;
+
+  if (opts.scale > MAX_SCALE)
+    opts.scale = MAX_SCALE;
+
+  if (opts.speed < 1)
+    opts.speed = 1;
+
+  static uint8_t assembled[ROM_SIZE];
+  size_t rom_len;
+  const uint8_t *rom;
+  int heap_rom = 0;
+
+  if (load_rom(opts.rom_path, assembled, &rom, &rom_len, &heap_rom) != 0)
+    return 1;
+
+  if (opts.trace && opts.debug_steps < 0) {
+    fprintf(stderr, "4b: -t/--trace requires -d/--debug N\n");
+    if (heap_rom)
+      free((void *)rom);
+
+    return 1;
+  }
+
+  VM vm;
+
+  fourb_vm_load_rom(&vm, rom, rom_len);
+
+  int rc;
+  if (opts.debug_steps >= 0)
+    rc = run_headless(&vm, &opts);
+  else
+    rc = run_gui(&vm, opts.rom_path, rom, rom_len, &opts);
+
+  if (heap_rom)
+    free((void *)rom);
+
+  return rc;
 }
