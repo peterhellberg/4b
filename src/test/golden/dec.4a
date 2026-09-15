@@ -1,0 +1,3 @@
+lda #5
+dec
+sta r0
