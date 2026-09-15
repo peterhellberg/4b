@@ -187,6 +187,12 @@ rewritten by the parser to `flag` with a `label_ref` operand. Register names
 (`r0`–`r15`) are recognized during parsing so `r16` is rejected with a clear
 message.
 
+Behavior notes: the parser aborts the file on the first error (no recovery;
+`Diag` therefore holds at most one parse error). The comma between the two
+`peek`/`flip` operands is optional. Mnemonics are matched case-insensitively,
+but label and const names are case-sensitive (`StringHashMap`) — this diverges
+from `docs/4AL.md` §3, which declares all identifiers case-insensitive.
+
 ## 10. Symbol tables and flag-slot allocation (pass 1)
 
 ```zig
