@@ -1,6 +1,6 @@
 # 4C Compiler Design
 
-*Version 0.1. Companion to `docs/4CL.md`.*
+Companion to `docs/4CL.md`.
 
 `4c` compiles a 4C source file (`.4c`) into a raw 384-byte program image
 (`.4b`) that the 4B box can run — or, on request, into equivalent `.4a`

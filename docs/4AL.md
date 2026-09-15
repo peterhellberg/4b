@@ -1,6 +1,6 @@
 # 4A Language Specification
 
-*Version 0.1 (draft). Companion to `docs/4BoD.md`.*
+Companion to `docs/4BoD.md`.
 
 4A is a small, assembly-style programming language for the 4B box.
 A `.4a` source file is a sequence of instructions that map 1:1 onto

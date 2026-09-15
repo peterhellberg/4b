@@ -17,6 +17,8 @@ permissions:
 jobs:
   test:
     name: Test (Zig 0.17.0-dev.387+31f157d80)
+    # Linux-only: the box links X11/GL system libraries, and the macOS
+    # (frameworks) and Windows branches of addRaylib are untested.
     runs-on: ubuntu-latest
     env:
       ZIG_VERSION: 0.17.0-dev.387+31f157d80
