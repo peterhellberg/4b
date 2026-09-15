@@ -44,7 +44,12 @@ pub export fn fourb_vm_tick(vm: *VM) void {
         0x2 => vm.regs[a] = vm.acc & 0x0F,
         0x3 => vm.acc = a,
         0x4 => vm.acc = vm.buttons & 0x0F,
-        0x5 => vm.acc = (vm.acc + 1) & 0x0F,
+        // Local 4b extension: opcode 0x5 with a == 1 decrements.
+        // All historical ROMs encode a == 0 here (plain inc).
+        0x5 => {
+            const step: u8 = if (a == 0) 1 else 15;
+            vm.acc = (vm.acc + step) & 0x0F;
+        },
         0x6 => @memset(&vm.screen, 0),
         0x7 => vm.acc = (vm.acc << 1) & 0x0F,
         0x8 => vm.acc >>= 1,
@@ -144,6 +149,28 @@ test "vm: data movement and alu" {
     vm.program[9] = inst(0x8, 0, 0);
     fourb_vm_tick(&vm);
     try std.testing.expectEqual(7, vm.acc);
+}
+
+test "vm: dec wraps mod 16, inc ignores spare nibble" {
+    var vm: VM = undefined;
+    fourb_vm_init(&vm);
+
+    // dec (opcode 0x5, a == 1) from every value.
+    var v: u8 = 0;
+    while (v < 16) : (v += 1) {
+        vm.acc = v;
+        vm.program[0] = inst(0x5, 1, 0);
+        vm.pc = 0;
+        fourb_vm_tick(&vm);
+        try std.testing.expectEqual(v -% 1 & 0x0F, vm.acc);
+    }
+
+    // inc (a == 0) still increments, with any b nibble.
+    vm.acc = 15;
+    vm.program[0] = inst(0x5, 0, 0xF);
+    vm.pc = 0;
+    fourb_vm_tick(&vm);
+    try std.testing.expectEqual(0, vm.acc);
 }
 
 test "vm: peek flip cls" {
