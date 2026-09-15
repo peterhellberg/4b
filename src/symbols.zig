@@ -105,8 +105,9 @@ pub fn analyze(alloc: std.mem.Allocator, diag: *dia.Diag, items: []const Item) A
                     diag.err(o.line, o.col, "org position out of range (0-256)", .{});
                 } else if (o.value < pos) {
                     diag.err(o.line, o.col, "org moves position backwards", .{});
+                } else {
+                    pos = o.value;
                 }
-                pos = o.value;
             },
             .dw => |d| {
                 if (d.value > 0xFFF) {
@@ -115,8 +116,15 @@ pub fn analyze(alloc: std.mem.Allocator, diag: *dia.Diag, items: []const Item) A
                 pos += 1;
             },
         }
-        if (pos > 256) {
-            diag.err(0, 0, "program too long (exceeds 256 instructions)", .{});
+        if (pos == 257) {
+            const span = switch (item) {
+                .label => |l| .{ l.line, l.col },
+                .inst => |i| .{ i.line, i.col },
+                .const_def => |c| .{ c.line, c.col },
+                .org => |o| .{ o.line, o.col },
+                .dw => |d| .{ d.line, d.col },
+            };
+            diag.err(span[0], span[1], "program too long (exceeds 256 instructions)", .{});
         }
     }
 

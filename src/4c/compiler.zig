@@ -20,22 +20,25 @@ pub fn compileWords(
     diag: *dia.Diag,
     src: []const u8,
 ) CompileError!codegen_mod.Result {
-    const tokens = lexer.lex(alloc, diag, src) catch {
-        return error.CompileFailed;
+    const tokens = lexer.lex(alloc, diag, src) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.LexError => return error.CompileFailed,
     };
 
     if (diag.hasErrors()) return error.CompileFailed;
 
-    const prog = parser.parse(alloc, diag, tokens.items) catch {
-        return error.CompileFailed;
+    const prog = parser.parse(alloc, diag, tokens.items) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.ParseError => return error.CompileFailed,
     };
 
     if (diag.hasErrors()) return error.CompileFailed;
 
     var semer = sema_mod.Semer{ .alloc = alloc, .diag = diag, .consts = .empty };
 
-    const sprog = semer.run(prog) catch {
-        return error.CompileFailed;
+    const sprog = semer.run(prog) catch |e| switch (e) {
+        error.OutOfMemory => return error.OutOfMemory,
+        error.SemaError => return error.CompileFailed,
     };
 
     if (diag.hasErrors()) return error.CompileFailed;

@@ -25,21 +25,21 @@ pub fn write(
         switch (op) {
             .nop, .read, .inc, .cls, .shl, .shr => {},
             .lda_imm => {
-                try w.splatByteAll(' ', MNEMONIC_WIDTH - m.len);
+                try w.splatByteAll(' ', MNEMONIC_WIDTH -| m.len);
                 try w.print("#{d}", .{a});
             },
             .lda_mem, .sta, .ifeq, .ifgt, .iflt => {
-                try w.splatByteAll(' ', MNEMONIC_WIDTH - m.len);
+                try w.splatByteAll(' ', MNEMONIC_WIDTH -| m.len);
                 try writeReg(w, a);
             },
             .peek, .flip => {
-                try w.splatByteAll(' ', MNEMONIC_WIDTH - m.len);
+                try w.splatByteAll(' ', MNEMONIC_WIDTH -| m.len);
                 try writeReg(w, a);
                 try w.writeAll(", ");
                 try writeReg(w, b);
             },
             .flag, .jmp => {
-                try w.splatByteAll(' ', MNEMONIC_WIDTH - m.len);
+                try w.splatByteAll(' ', MNEMONIC_WIDTH -| m.len);
                 try w.print("{d}", .{a});
             },
         }
