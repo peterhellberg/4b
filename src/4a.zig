@@ -55,6 +55,7 @@ pub fn main(args: std.process.Init) !u8 {
     };
 
     var diag = dia.Diag.init(alloc, input_path, src);
+    defer diag.deinit();
 
     const image = assembler.assemble(alloc, &diag, src) catch |e| switch (e) {
         error.AssembleFailed => {
