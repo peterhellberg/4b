@@ -13,13 +13,15 @@ pub fn build(b: *std.Build) void {
     const dia_mod = zigModule(b, "src/dia.zig", target, optimize);
     const isa_mod = zigModule(b, "src/isa.zig", target, optimize);
     const rom_mod = zigModule(b, "src/rom.zig", target, optimize);
-    const vm_mod = zigModule(b, "src/vm.zig", target, optimize);
 
     const shared_imports = [_]std.Build.Module.Import{
         .{ .name = "dia", .module = dia_mod },
         .{ .name = "isa", .module = isa_mod },
         .{ .name = "rom", .module = rom_mod },
     };
+
+    // vm is a compiler-only import (com_imports), not part of shared_imports.
+    const vm_mod = zigModule(b, "src/vm.zig", target, optimize);
 
     // The 4c test suite emulates compiled programs on the VM, so the
     // compiler module also sees the shared vm module instance.
