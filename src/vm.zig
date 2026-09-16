@@ -47,7 +47,7 @@ pub export fn fourb_vm_tick(vm: *VM) void {
         // Local 4b extension: opcode 0x5 with a == 1 decrements.
         // All historical ROMs encode a == 0 here (plain inc).
         0x5 => {
-            const step: u8 = if (a == 0) 1 else 15;
+            const step: u8 = if (a == 1) 15 else 1;
             vm.acc = (vm.acc + step) & 0x0F;
         },
         0x6 => @memset(&vm.screen, 0),
@@ -171,6 +171,13 @@ test "vm: dec wraps mod 16, inc ignores spare nibble" {
     vm.pc = 0;
     fourb_vm_tick(&vm);
     try std.testing.expectEqual(0, vm.acc);
+
+    // Only a == 1 decrements; other spare nibbles still inc.
+    vm.acc = 5;
+    vm.program[0] = inst(0x5, 2, 0);
+    vm.pc = 0;
+    fourb_vm_tick(&vm);
+    try std.testing.expectEqual(6, vm.acc);
 }
 
 test "vm: peek flip cls" {
