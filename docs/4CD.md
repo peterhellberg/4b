@@ -262,7 +262,7 @@ see what to trim.
 Lowering catalog (normative shapes are in `docs/4CL.md` §7):
 
 - **Load/store**: `lda #k` / `lda rv`; then an unguarded `sta rv`.
-- **± literal k**: `k` × `inc`; subtraction uses `(16-k)` × `inc`.
+- **± literal k**: `k` × `inc`; subtraction uses `k` × `dec` when 1 <= k <= 7, else `(16-k)` × `inc` (fewest words).
 - **Add loop** (`x += rd`, ~16 words, 2 slots): zero-guard, then a
   bottom-tested count-up loop whose exit is fall-through:
 
@@ -284,13 +284,13 @@ Lowering catalog (normative shapes are in `docs/4CL.md` §7):
   FZ: flag       ; slot FZ (exit join)
   ```
 
-- **Sub loop** (`x -= rd`): same skeleton; the body applies `15 × inc`
-  between `lda rx`/`sta rx` (mod-16 decrement), ~24 words, 2 slots.
+- **Sub loop** (`x -= rd`): same skeleton; the body applies a single `dec`
+  between `lda rx`/`sta rx`, ~16 words, 2 slots.
   Constant operands avoid loops entirely.
 - **Shifts**: literal distance = run of `shl`/`shr`; variable distance =
   counting loop shaped like the add loop (~13 words, 2 slots).
-- **Unary minus** (`-rv`): sum 15 into `acc` repeatedly, `rv` times
-  (`15·v ≡ -v mod 16`), 2 slots.
+- **Unary minus** (`-rv`): zero the target, then run the sub loop
+  (one `dec` per pass), 2 slots.
 - **Masks** (`x & m`): decompose `m` into lowest set bit `l` and highest
   `h`; emit `shr × l`, `shl × l` (clear below `l`), then
   `shl × (3-h)`, `shr × (3-h)` (clear above `h`) — at most 6 ops,

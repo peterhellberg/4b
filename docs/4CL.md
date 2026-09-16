@@ -206,7 +206,7 @@ Instruction counts assume the general form; constant cases are cheaper.
 | Expression form                  | Lowering                                         | Flag slots |
 |----------------------------------|--------------------------------------------------|-----------:|
 | `x + k` (literal)                | `k` × `inc`                                      | 0 |
-| `x - k` (literal)                | `(16-k)` × `inc` (subtracting wraps to adding)   | 0 |
+| `x - k` (literal)                | `k` × `dec` when 1 <= k <= 7, else `(16-k)` × `inc` (fewest words) | 0 |
 | `x << k` / `x >> k`              | `k` × `shl` / `shr`                              | 0 |
 | `x & m` (mask literal)           | ≤ 6 × `shl`/`shr` (below)                        | 0 |
 | `a + b`, `a - b` (both runtime)  | generated add/sub loop                           | 2 |
@@ -220,10 +220,9 @@ results.
 
 **Add loop** (`acc += b`, `b` in a register): a counter counts up to `b`
 while the partial sum rides along through scratch; roughly 16 words,
-2 flag slots. **Sub loop**: identical skeleton, but each pass decrements
-the partial sum — decrementing is 15 × `inc` (mod 16) — so a runtime
-subtraction costs about 30 words. Prefer constant operands: `x -= 1;` is
-fifteen inline `inc`s and no loop.
+2 flag slots. **Sub loop**: identical skeleton, but each pass applies a single `dec`
+to the partial sum — same cost as add, roughly 16 words, 2 flag slots.
+Prefer constant operands: `x -= 1;` is a single `dec` and no loop.
 
 **Masks.** `x & m` with set bits spanning `h..l` (lowest set bit `l`,
 highest `h`) lowers to `shr × l; shl × l` (clear below `l`), then
