@@ -187,7 +187,7 @@ fn addRunStep(
 ) void {
     const run = b.addRunArtifact(exe);
     run.step.dependOn(b.getInstallStep());
-    if (b.args) |args| run.addArgs(args);
+    run.addPassthruArgs();
 
     const step = b.step(name, description);
     step.dependOn(&run.step);
