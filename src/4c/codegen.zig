@@ -117,7 +117,7 @@ pub const Codegen = struct {
                 // shl x(3-N) moves bit N to the top of the nibble,
                 // then shr x3 drops everything but that bit.
                 var i: u4 = 0;
-                const up: u4 = 3 - @intFromEnum(side);
+                const up: u4 = 3 - @backingInt(side);
                 while (i < up) : (i += 1) _ = try self.w(.shl, 0, 0);
                 i = 0;
                 while (i < 3) : (i += 1) _ = try self.w(.shr, 0, 0);

@@ -127,14 +127,14 @@ pub const Dw = struct {
 };
 
 pub fn encode(op: Op, a: u4, b: u4) u16 {
-    return (@as(u16, @intFromEnum(op)) << 8) | (@as(u16, a) << 4) | @as(u16, b);
+    return (@as(u16, @backingInt(op)) << 8) | (@as(u16, a) << 4) | @as(u16, b);
 }
 
 pub const Decoded = struct { op: Op, a: u4, b: u4 };
 
 pub fn decode(word: u16) Decoded {
     return .{
-        .op = @enumFromInt(@as(u4, @intCast((word >> 8) & 0xF))),
+        .op = @fromBackingInt(@intCast(@as(u4, @intCast((word >> 8) & 0xF)))),
         .a = @intCast((word >> 4) & 0xF),
         .b = @intCast(word & 0xF),
     };
@@ -144,14 +144,14 @@ test "all 16 opcodes covered, inc shared with dec" {
     var seen: [16]bool = @splat(false);
     var dups: usize = 0;
     for (specs) |s| {
-        const i: usize = @intFromEnum(s.op);
+        const i: usize = @backingInt(s.op);
         if (seen[i]) dups += 1;
         seen[i] = true;
     }
     // Only lda_imm shares its mnemonic; every other opcode has a spec,
     // and exactly one opcode (inc/dec, 0x5) has two spellings.
     for (seen, 0..) |s, i| {
-        if (i == @intFromEnum(Op.lda_imm)) continue;
+        if (i == @backingInt(Op.lda_imm)) continue;
         try std.testing.expect(s);
     }
     try std.testing.expectEqual(1, dups);
