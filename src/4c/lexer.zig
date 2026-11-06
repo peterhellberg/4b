@@ -67,9 +67,11 @@ fn keywordKind(text: []const u8) ?Kind {
         .{ "break", Kind.kw_break },
         .{ "continue", Kind.kw_continue },
     };
+
     inline for (map) |entry| {
         if (std.mem.eql(u8, text, entry[0])) return entry[1];
     }
+
     return null;
 }
 
@@ -88,17 +90,20 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
             i += 1;
             line += 1;
             col = 1;
+
             continue;
         }
 
         if (c == '\r' or c == ' ' or c == '\t') {
             i += 1;
             col += 1;
+
             continue;
         }
 
         if (c == '/' and i + 1 < src.len and src[i + 1] == '/') {
             while (i < src.len and src[i] != '\n') i += 1;
+
             continue;
         }
 
@@ -106,9 +111,12 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
             const start = i;
             const start_line = line;
             const start_col = col;
+
             var radix: u8 = 10;
+
             if (c == '0' and i + 1 < src.len) {
                 const next = src[i + 1];
+
                 if (next == 'x' or next == 'X') {
                     radix = 16;
                     i += 2;
@@ -119,8 +127,10 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
                     col += 2;
                 }
             }
+
             var value: u64 = 0;
             var started = false;
+
             while (i < src.len) {
                 const d = src[i];
                 const dv: ?u64 = switch (radix) {
@@ -129,20 +139,31 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
                     2 => if (d == '0') 0 else if (d == '1') 1 else null,
                     else => unreachable,
                 };
+
                 if (dv == null) break;
+
                 started = true;
                 value = value *% radix +% dv.?;
                 i += 1;
                 col += 1;
             }
+
             if (!started) {
-                diag.err(start_line, start_col, "expected digits after '{s}'", .{src[start..i]});
+                diag.err(start_line, start_col, "expected digits after '{s}'", .{
+                    src[start..i],
+                });
+
                 return error.LexError;
             }
+
             if (i < src.len and isIdentCont(src[i])) {
-                diag.err(start_line, start_col, "malformed number literal '{s}'", .{src[start .. i + 1]});
+                diag.err(start_line, start_col, "malformed number literal '{s}'", .{
+                    src[start .. i + 1],
+                });
+
                 return error.LexError;
             }
+
             try tokens.append(alloc, .{
                 .kind = .number,
                 .text = src[start..i],
@@ -150,6 +171,7 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
                 .line = start_line,
                 .col = start_col,
             });
+
             continue;
         }
 
@@ -157,13 +179,23 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
             const start = i;
             const start_line = line;
             const start_col = col;
+
             while (i < src.len and isIdentCont(src[i])) {
                 i += 1;
                 col += 1;
             }
+
             const text = src[start..i];
             const kind = keywordKind(text) orelse Kind.ident;
-            try tokens.append(alloc, .{ .kind = kind, .text = text, .value = 0, .line = start_line, .col = start_col });
+
+            try tokens.append(alloc, .{
+                .kind = kind,
+                .text = text,
+                .value = 0,
+                .line = start_line,
+                .col = start_col,
+            });
+
             continue;
         }
 
@@ -171,53 +203,78 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
         if (i + 1 < src.len) {
             const pair = src[i .. i + 2];
             const pair_kind: ?Kind = blk: {
-                if (std.mem.eql(u8, pair, "==")) break :blk Kind.eq;
-                if (std.mem.eql(u8, pair, "!=")) break :blk Kind.neq;
-                if (std.mem.eql(u8, pair, "<=")) break :blk Kind.le;
-                if (std.mem.eql(u8, pair, ">=")) break :blk Kind.ge;
-                if (std.mem.eql(u8, pair, "&&")) break :blk Kind.amp_amp;
-                if (std.mem.eql(u8, pair, "||")) break :blk Kind.bar_bar;
-                if (std.mem.eql(u8, pair, "<<")) break :blk Kind.shl;
-                if (std.mem.eql(u8, pair, ">>")) break :blk Kind.shr;
-                if (std.mem.eql(u8, pair, "+=")) break :blk Kind.plus_assign;
-                if (std.mem.eql(u8, pair, "-=")) break :blk Kind.minus_assign;
+                if (std.mem.eql(u8, pair, "==")) break :blk .eq;
+                if (std.mem.eql(u8, pair, "!=")) break :blk .neq;
+                if (std.mem.eql(u8, pair, "<=")) break :blk .le;
+                if (std.mem.eql(u8, pair, ">=")) break :blk .ge;
+                if (std.mem.eql(u8, pair, "&&")) break :blk .amp_amp;
+                if (std.mem.eql(u8, pair, "||")) break :blk .bar_bar;
+                if (std.mem.eql(u8, pair, "<<")) break :blk .shl;
+                if (std.mem.eql(u8, pair, ">>")) break :blk .shr;
+                if (std.mem.eql(u8, pair, "+=")) break :blk .plus_assign;
+                if (std.mem.eql(u8, pair, "-=")) break :blk .minus_assign;
                 break :blk null;
             };
+
             if (pair_kind) |k| {
-                try tokens.append(alloc, .{ .kind = k, .text = pair, .value = 0, .line = line, .col = col });
+                try tokens.append(alloc, .{
+                    .kind = k,
+                    .text = pair,
+                    .value = 0,
+                    .line = line,
+                    .col = col,
+                });
                 i += 2;
                 col += 2;
+
                 continue;
             }
         }
 
         const single: ?Kind = switch (c) {
-            '(' => Kind.lparen,
-            ')' => Kind.rparen,
-            '{' => Kind.lbrace,
-            '}' => Kind.rbrace,
-            ';' => Kind.semi,
-            ',' => Kind.comma,
-            '=' => Kind.assign,
-            '<' => Kind.lt,
-            '>' => Kind.gt,
-            '!' => Kind.bang,
-            '+' => Kind.plus,
-            '-' => Kind.minus,
-            '&' => Kind.amp,
+            '(' => .lparen,
+            ')' => .rparen,
+            '{' => .lbrace,
+            '}' => .rbrace,
+            ';' => .semi,
+            ',' => .comma,
+            '=' => .assign,
+            '<' => .lt,
+            '>' => .gt,
+            '!' => .bang,
+            '+' => .plus,
+            '-' => .minus,
+            '&' => .amp,
             else => null,
         };
+
         if (single) |k| {
-            try tokens.append(alloc, .{ .kind = k, .text = src[i .. i + 1], .value = 0, .line = line, .col = col });
+            try tokens.append(alloc, .{
+                .kind = k,
+                .text = src[i .. i + 1],
+                .value = 0,
+                .line = line,
+                .col = col,
+            });
+
             i += 1;
             col += 1;
+
             continue;
         }
 
         diag.err(line, col, "unexpected character '{c}'", .{c});
+
         return error.LexError;
     }
 
-    try tokens.append(alloc, .{ .kind = .eof, .text = "", .value = 0, .line = line, .col = col });
+    try tokens.append(alloc, .{
+        .kind = .eof,
+        .text = "",
+        .value = 0,
+        .line = line,
+        .col = col,
+    });
+
     return tokens;
 }

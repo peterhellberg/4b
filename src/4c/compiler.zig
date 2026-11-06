@@ -36,7 +36,11 @@ pub fn compileWords(
 
     if (diag.hasErrors()) return error.CompileFailed;
 
-    var semer = sema_mod.Semer{ .alloc = alloc, .diag = diag, .consts = .empty };
+    var semer = sema_mod.Semer{
+        .alloc = alloc,
+        .diag = diag,
+        .consts = .empty,
+    };
 
     const sprog = semer.run(prog) catch |e| switch (e) {
         error.OutOfMemory => return error.OutOfMemory,
@@ -174,14 +178,17 @@ test "variable add emits bounded counter loop" {
 
     const top_slot: u4 = @intCast((out.words[t + 2] >> 4) & 0xF);
     const end_slot: u4 = @intCast((out.words[t + 5] >> 4) & 0xF);
+
     try std.testing.expect(top_slot != end_slot);
 
     // The loop must close with a backedge to the top flag and, after it,
     // the end flag the exit jump targets.
     const back = isa.encode(.jmp, top_slot, 0);
     const end = isa.encode(.flag, end_slot, 0);
+
     var bi: ?usize = null;
     var ei: ?usize = null;
+
     for (out.words, 0..) |w, i| {
         if (bi == null and w == back) bi = i;
         if (bi != null and w == end) {
@@ -189,6 +196,7 @@ test "variable add emits bounded counter loop" {
             break;
         }
     }
+
     try std.testing.expect(bi != null and ei != null and ei.? > bi.?);
 }
 
@@ -202,6 +210,7 @@ test "break outside loop is an error" {
         const src = try std.fmt.allocPrint(alloc, "fn main() {{ {s} }}\n", .{kw});
         var diag = dia.Diag.init(alloc, "t.4c", src);
         const result = compileWords(alloc, &diag, src);
+
         try std.testing.expectError(error.CompileFailed, result);
         try std.testing.expect(diag.hasErrors());
     }
@@ -217,9 +226,11 @@ test "flip and peek reject two computed args" {
         "u4 x = 1;\nu4 y = 2;\nfn main() { flip(x + 1, y + 1); halt(); }\n",
         "u4 x = 1;\nu4 y = 2;\nu4 p = 0;\nfn main() { p = peek(x + 1, y + 1); halt(); }\n",
     };
+
     for (bad) |src| {
         var diag = dia.Diag.init(alloc, "t.4c", src);
         const result = compileWords(alloc, &diag, src);
+
         try std.testing.expectError(error.CompileFailed, result);
         try std.testing.expect(diag.hasErrors());
     }
@@ -227,6 +238,7 @@ test "flip and peek reject two computed args" {
     const ok = "u4 x = 1;\nu4 y = 2;\nfn main() { flip(x + 1, y); halt(); }\n";
     var diag = dia.Diag.init(alloc, "t.4c", ok);
     _ = try compileWords(alloc, &diag, ok);
+
     try std.testing.expectEqual(0, diag.errors.items.len);
 }
 
@@ -247,21 +259,27 @@ fn runBranch(cond: []const u8, a: u4, b: u4) ![16]u8 {
 
     var diag = dia.Diag.init(alloc, "t.4c", src);
     const out = try compileWords(alloc, &diag, src);
+
     try std.testing.expectEqual(0, diag.errors.items.len);
 
     var vm: vm_mod.VM = undefined;
     vm_mod.fourb_vm_init(&vm);
+
     for (out.words, 0..) |w, i| vm.program[i] = w;
     var i: usize = 0;
+
     while (i < 2000) : (i += 1) vm_mod.fourb_vm_tick(&vm);
+
     return vm.regs;
 }
 
 fn expectBranch(cond: []const u8, a: u4, b: u4, x: u4) !void {
     const regs = try runBranch(cond, a, b);
+
     if (regs[0] != x) {
         std.debug.print("BRANCH: cond={s} a={d} b={d} want x={d} got {d}\n", .{ cond, a, b, x, regs[0] });
     }
+
     try std.testing.expectEqual(x, regs[0]);
 }
 
@@ -309,11 +327,14 @@ test "builtin call errors" {
     for (cases) |c| {
         var diag = dia.Diag.init(alloc, "t.4c", c.src);
         const result = compileWords(alloc, &diag, c.src);
+
         try std.testing.expectError(error.CompileFailed, result);
+
         var found = false;
         for (diag.errors.items) |e| {
             if (std.mem.indexOf(u8, e.msg, c.msg) != null) found = true;
         }
+
         try std.testing.expect(found);
     }
 }
@@ -342,6 +363,7 @@ fn countOp(words: []const u16, op: isa.Op, a: u4) usize {
     for (words) |w| {
         if (w == isa.encode(op, a, 0)) n += 1;
     }
+
     return n;
 }
 
@@ -357,6 +379,7 @@ fn compileStmt(stmt: []const u8) ![]u16 {
     var diag = dia.Diag.init(alloc, "t.4c", src);
     const out = try compileWords(alloc, &diag, src);
     try std.testing.expectEqual(0, diag.errors.items.len);
+
     return try std.testing.allocator.dupe(u16, out.words);
 }
 
@@ -364,24 +387,28 @@ test "subtraction uses fewest words" {
     // x -= 1 is a single dec (0x510), not fifteen incs.
     const minus1 = try compileStmt("x -= 1;");
     defer std.testing.allocator.free(minus1);
+
     try std.testing.expectEqual(1, countOp(minus1, .inc, 1));
     try std.testing.expectEqual(0, countOp(minus1, .inc, 0));
 
     // x -= 2 is two decs.
     const minus2 = try compileStmt("x -= 2;");
     defer std.testing.allocator.free(minus2);
+
     try std.testing.expectEqual(2, countOp(minus2, .inc, 1));
     try std.testing.expectEqual(0, countOp(minus2, .inc, 0));
 
     // x -= 9 stays seven unrolled incs (16 - 9 < 9).
     const minus9 = try compileStmt("x -= 9;");
     defer std.testing.allocator.free(minus9);
+
     try std.testing.expectEqual(0, countOp(minus9, .inc, 1));
     try std.testing.expectEqual(7, countOp(minus9, .inc, 0));
 
     // x += 3 is unaffected: three incs.
     const plus3 = try compileStmt("x += 3;");
     defer std.testing.allocator.free(plus3);
+
     try std.testing.expectEqual(0, countOp(plus3, .inc, 1));
     try std.testing.expectEqual(3, countOp(plus3, .inc, 0));
 }

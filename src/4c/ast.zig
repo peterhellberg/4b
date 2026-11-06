@@ -5,10 +5,32 @@ pub const Span = struct {
     col: u32,
 };
 
-pub const ArithOp = enum { add, sub };
-pub const CmpOp = enum { eq, ne, lt, gt, le, ge };
-pub const AssignOp = enum { assign, add_assign, sub_assign };
-pub const Btn = enum(u2) { left = 0, right = 1, up = 2, down = 3 };
+pub const ArithOp = enum {
+    add,
+    sub,
+};
+
+pub const CmpOp = enum {
+    eq,
+    ne,
+    lt,
+    gt,
+    le,
+    ge,
+};
+
+pub const AssignOp = enum {
+    assign,
+    add_assign,
+    sub_assign,
+};
+
+pub const Btn = enum(u2) {
+    left = 0,
+    right = 1,
+    up = 2,
+    down = 3,
+};
 
 pub const ShiftDist = union(enum) {
     lit: u64,
@@ -24,12 +46,26 @@ pub const Expr = struct {
 pub const ExprKind = union(enum) {
     int: u64,
     variable: []const u8,
-    peek: struct { x: *Expr, y: *Expr },
+    peek: struct {
+        x: *Expr,
+        y: *Expr,
+    },
     buttons,
     btn: Btn,
-    arith: struct { op: ArithOp, lhs: *Expr, rhs: *Expr },
-    band: struct { lhs: *Expr, mask_expr: *Expr },
-    shift: struct { left: bool, operand: *Expr, dist: ShiftDist },
+    arith: struct {
+        op: ArithOp,
+        lhs: *Expr,
+        rhs: *Expr,
+    },
+    band: struct {
+        lhs: *Expr,
+        mask_expr: *Expr,
+    },
+    shift: struct {
+        left: bool,
+        operand: *Expr,
+        dist: ShiftDist,
+    },
     neg: *Expr,
 };
 
@@ -39,17 +75,30 @@ pub const Cond = struct {
 };
 
 pub const CondKind = union(enum) {
-    or_cond: struct { lhs: *Cond, rhs: *Cond },
-    and_cond: struct { lhs: *Cond, rhs: *Cond },
+    or_cond: struct {
+        lhs: *Cond,
+        rhs: *Cond,
+    },
+    and_cond: struct {
+        lhs: *Cond,
+        rhs: *Cond,
+    },
     not_cond: *Cond,
-    cmp: struct { op: CmpOp, lhs: *Expr, rhs: *Expr },
+    cmp: struct {
+        op: CmpOp,
+        lhs: *Expr,
+        rhs: *Expr,
+    },
     truthy: *Expr,
 };
 
 pub const VoidCall = union(enum) {
     cls,
     halt,
-    flip: struct { x: *Expr, y: *Expr },
+    flip: struct {
+        x: *Expr,
+        y: *Expr,
+    },
 };
 
 pub const Stmt = struct {
@@ -58,9 +107,19 @@ pub const Stmt = struct {
 };
 
 pub const StmtKind = union(enum) {
-    assign: struct { target: []const u8, op: AssignOp, value: *Expr },
-    if_stmt: struct { cond: *Cond, then_stmt: *Stmt, else_stmt: ?*Stmt },
-    for_stmt: struct { body: *Stmt },
+    assign: struct {
+        target: []const u8,
+        op: AssignOp,
+        value: *Expr,
+    },
+    if_stmt: struct {
+        cond: *Cond,
+        then_stmt: *Stmt,
+        else_stmt: ?*Stmt,
+    },
+    for_stmt: struct {
+        body: *Stmt,
+    },
     brk,
     cont,
     voidcall: VoidCall,
