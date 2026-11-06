@@ -22,10 +22,14 @@ pub fn main(args: std.process.Init) !u8 {
     while (it.next()) |arg| {
         if (std.mem.eql(u8, arg, "-h") or std.mem.eql(u8, arg, "--help")) {
             printUsage();
+
             return 0;
         } else if (std.mem.eql(u8, arg, "-o") or std.mem.eql(u8, arg, "--output")) {
             opts.output = it.next() orelse {
-                std.debug.print("error: missing argument for {s}\n", .{arg});
+                std.debug.print("error: missing argument for {s}\n", .{
+                    arg,
+                });
+
                 return 1;
             };
         } else if (std.mem.startsWith(u8, arg, "-o") and arg.len > 2) {
@@ -34,7 +38,10 @@ pub fn main(args: std.process.Init) !u8 {
             opts.output = arg["--output=".len..];
         } else if (std.mem.eql(u8, arg, "-S") or std.mem.eql(u8, arg, "--emit-asm")) {
             opts.emit_asm = it.next() orelse {
-                std.debug.print("error: missing argument for {s}\n", .{arg});
+                std.debug.print("error: missing argument for {s}\n", .{
+                    arg,
+                });
+
                 return 1;
             };
         } else if (std.mem.startsWith(u8, arg, "-S") and arg.len > 2) {
@@ -42,10 +49,14 @@ pub fn main(args: std.process.Init) !u8 {
         } else if (std.mem.startsWith(u8, arg, "--emit-asm=")) {
             opts.emit_asm = arg["--emit-asm=".len..];
         } else if (std.mem.startsWith(u8, arg, "-")) {
-            std.debug.print("error: unknown option '{s}'\n", .{arg});
+            std.debug.print("error: unknown option '{s}'\n", .{
+                arg,
+            });
+
             return 1;
         } else if (opts.input != null) {
             std.debug.print("error: multiple input files\n", .{});
+
             return 1;
         } else {
             opts.input = arg;
@@ -54,15 +65,26 @@ pub fn main(args: std.process.Init) !u8 {
 
     const input_path = opts.input orelse {
         std.debug.print("error: no input file\n\n", .{});
+
         printUsage();
+
         return 1;
     };
 
     const alloc = args.arena.allocator();
     const io = args.io;
 
-    const src = std.Io.Dir.cwd().readFileAlloc(io, input_path, alloc, .limited(dia.max_src_bytes)) catch |e| {
-        std.debug.print("error: cannot read '{s}': {s}\n", .{ input_path, @errorName(e) });
+    const src = std.Io.Dir.cwd().readFileAlloc(
+        io,
+        input_path,
+        alloc,
+        .limited(dia.max_src_bytes),
+    ) catch |e| {
+        std.debug.print("error: cannot read '{s}': {s}\n", .{
+            input_path,
+            @errorName(e),
+        });
+
         return 1;
     };
 
@@ -85,11 +107,16 @@ pub fn main(args: std.process.Init) !u8 {
 
         emit_asm.write(alloc, out.words, &text) catch {
             std.debug.print("error: out of memory\n", .{});
+
             return 1;
         };
 
         writeOutput(io, path, text.items) catch |e| {
-            std.debug.print("error: cannot write '{s}': {s}\n", .{ path, @errorName(e) });
+            std.debug.print("error: cannot write '{s}': {s}\n", .{
+                path,
+                @errorName(e),
+            });
+
             return 1;
         };
     }
@@ -100,6 +127,7 @@ pub fn main(args: std.process.Init) !u8 {
 
     const output_path = opts.output orelse defaultOutput(alloc, input_path) catch {
         std.debug.print("error: out of memory\n", .{});
+
         return 1;
     };
 
@@ -111,6 +139,7 @@ pub fn main(args: std.process.Init) !u8 {
             output_path,
             @errorName(e),
         });
+
         return 1;
     };
 
@@ -120,15 +149,20 @@ pub fn main(args: std.process.Init) !u8 {
 fn writeOutput(io: std.Io, path: []const u8, data: []const u8) !void {
     if (std.mem.eql(u8, path, "-")) {
         try std.Io.File.stdout().writeStreamingAll(io, data);
+
         return;
     }
 
-    try std.Io.Dir.cwd().writeFile(io, .{ .sub_path = path, .data = data });
+    try std.Io.Dir.cwd().writeFile(io, .{
+        .sub_path = path,
+        .data = data,
+    });
 }
 
 fn defaultOutput(alloc: std.mem.Allocator, input_path: []const u8) ![]const u8 {
     // Only treat a '.' after the last '/' as an extension separator.
     const base = if (std.mem.lastIndexOfScalar(u8, input_path, '/')) |s| s + 1 else 0;
+
     const stem_len = if (std.mem.lastIndexOfScalar(u8, input_path[base..], '.')) |dot|
         base + dot
     else
@@ -141,12 +175,15 @@ fn defaultOutput(alloc: std.mem.Allocator, input_path: []const u8) ![]const u8 {
 
 test "defaultOutput keeps directories with dots" {
     const alloc = std.testing.allocator;
+
     const out = try defaultOutput(alloc, "my.dir/prog");
     defer alloc.free(out);
+
     try std.testing.expectEqualStrings("my.dir/prog.4b", out);
 
     const out2 = try defaultOutput(alloc, "prog.4c");
     defer alloc.free(out2);
+
     try std.testing.expectEqualStrings("prog.4b", out2);
 }
 
