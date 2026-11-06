@@ -13,7 +13,11 @@ pub const ParseError = error{
     OutOfMemory,
 };
 
-pub fn parse(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Token) ParseError!std.ArrayList(Item) {
+pub fn parse(
+    alloc: std.mem.Allocator,
+    diag: *dia.Diag,
+    tokens: []const Token,
+) ParseError!std.ArrayList(Item) {
     var items = std.ArrayList(Item).empty;
     var idx: usize = 0;
 
@@ -38,7 +42,13 @@ fn peek(tokens: []const Token, idx: usize) Token {
     return tokens[tokens.len - 1];
 }
 
-fn parseLine(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Token, idx: *usize, items: *std.ArrayList(Item)) ParseError!void {
+fn parseLine(
+    alloc: std.mem.Allocator,
+    diag: *dia.Diag,
+    tokens: []const Token,
+    idx: *usize,
+    items: *std.ArrayList(Item),
+) ParseError!void {
     while (true) {
         const t = peek(tokens, idx.*);
         if (t.kind == .eol or t.kind == .eof) break;
@@ -48,7 +58,13 @@ fn parseLine(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Token, i
 
             _ = expectToken(tokens, idx, .colon, diag, "expected ':' after label name") orelse return error.ParseError;
 
-            try items.append(alloc, .{ .label = .{ .name = name_tok.text, .line = name_tok.line, .col = name_tok.col } });
+            try items.append(alloc, .{
+                .label = .{
+                    .name = name_tok.text,
+                    .line = name_tok.line,
+                    .col = name_tok.col,
+                },
+            });
         } else if (t.kind == .ident) {
             try parseStatement(alloc, diag, tokens, idx, items);
 
@@ -64,7 +80,13 @@ fn parseLine(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Token, i
     if (peek(tokens, idx.*).kind == .eol) idx.* += 1;
 }
 
-fn parseStatement(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Token, idx: *usize, items: *std.ArrayList(Item)) ParseError!void {
+fn parseStatement(
+    alloc: std.mem.Allocator,
+    diag: *dia.Diag,
+    tokens: []const Token,
+    idx: *usize,
+    items: *std.ArrayList(Item),
+) ParseError!void {
     const tok = tokens[idx.*];
 
     if (std.ascii.eqlIgnoreCase(tok.text, "const")) {
@@ -74,12 +96,20 @@ fn parseStatement(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Tok
         _ = expectToken(tokens, idx, .equals, diag, "expected '=' after const name") orelse return error.ParseError;
 
         const val_tok = expectToken(tokens, idx, .number, diag, "expected numeric value") orelse return error.ParseError;
+
         if (val_tok.value > 15) {
             diag.err(val_tok.line, val_tok.col, "const value out of range (0-15)", .{});
             return error.ParseError;
         }
 
-        try items.append(alloc, .{ .const_def = .{ .name = name_tok.text, .value = @intCast(val_tok.value), .line = name_tok.line, .col = name_tok.col } });
+        try items.append(alloc, .{
+            .const_def = .{
+                .name = name_tok.text,
+                .value = @intCast(val_tok.value),
+                .line = name_tok.line,
+                .col = name_tok.col,
+            },
+        });
 
         return;
     }
@@ -88,12 +118,19 @@ fn parseStatement(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Tok
         idx.* += 1;
 
         const val_tok = expectToken(tokens, idx, .number, diag, "expected position value for org") orelse return error.ParseError;
+
         if (val_tok.value > 256) {
             diag.err(val_tok.line, val_tok.col, "org position out of range (0-256)", .{});
             return error.ParseError;
         }
 
-        try items.append(alloc, .{ .org = .{ .value = @intCast(val_tok.value), .line = val_tok.line, .col = val_tok.col } });
+        try items.append(alloc, .{
+            .org = .{
+                .value = @intCast(val_tok.value),
+                .line = val_tok.line,
+                .col = val_tok.col,
+            },
+        });
 
         return;
     }
@@ -102,22 +139,33 @@ fn parseStatement(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Tok
         idx.* += 1;
 
         const val_tok = expectToken(tokens, idx, .number, diag, "expected word value for dw") orelse return error.ParseError;
+
         if (val_tok.value > 0xFFF) {
             diag.err(val_tok.line, val_tok.col, "dw value out of range (0-0xFFF)", .{});
             return error.ParseError;
         }
 
-        try items.append(alloc, .{ .dw = .{ .value = @intCast(val_tok.value), .line = val_tok.line, .col = val_tok.col } });
+        try items.append(alloc, .{
+            .dw = .{
+                .value = @intCast(val_tok.value),
+                .line = val_tok.line,
+                .col = val_tok.col,
+            },
+        });
 
         return;
     }
 
     const spec = isa.lookupSpec(tok.text) orelse {
-        diag.err(tok.line, tok.col, "unknown mnemonic or directive '{s}'", .{tok.text});
+        diag.err(tok.line, tok.col, "unknown mnemonic or directive '{s}'", .{
+            tok.text,
+        });
+
         skipToEol(tokens, idx);
 
         return error.ParseError;
     };
+
     idx.* += 1;
 
     var a: ?Operand = null;
@@ -125,6 +173,7 @@ fn parseStatement(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Tok
 
     if (spec.a != .none) {
         a = parseOperand(tokens, idx, spec.a, diag);
+
         if (a == null) return error.ParseError;
     }
 
@@ -140,6 +189,7 @@ fn parseStatement(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Tok
 
     if (t2.kind != .eol and t2.kind != .eof) {
         diag.err(t2.line, t2.col, "unexpected token after instruction", .{});
+
         skipToEol(tokens, idx);
 
         return error.ParseError;
@@ -156,23 +206,33 @@ fn parseStatement(alloc: std.mem.Allocator, diag: *dia.Diag, tokens: []const Tok
 
 fn parseHashOperand(tokens: []const Token, idx: *usize, diag: *dia.Diag) ?Operand {
     idx.* += 1; // consume '#'
+
     const tok = peek(tokens, idx.*);
 
     if (tok.kind == .number) {
         idx.* += 1;
+
         if (tok.value > 15) {
             diag.err(tok.line, tok.col, "immediate value out of range (0-15)", .{});
+
             return null;
         }
-        return .{ .imm = @intCast(tok.value) };
+
+        return .{
+            .imm = @intCast(tok.value),
+        };
     }
 
     if (tok.kind == .ident) {
         idx.* += 1;
-        return .{ .const_ref = tok.text };
+
+        return .{
+            .const_ref = tok.text,
+        };
     }
 
     diag.err(tok.line, tok.col, "expected immediate value or const name after '#'", .{});
+
     return null;
 }
 
@@ -185,7 +245,9 @@ fn parseOperand(tokens: []const Token, idx: *usize, kind: isa.OperandKind, diag:
                 if (parseRegisterIndex(tok.text)) |reg_idx| {
                     idx.* += 1;
 
-                    return .{ .reg = reg_idx };
+                    return .{
+                        .reg = reg_idx,
+                    };
                 }
 
                 if (std.ascii.startsWithIgnoreCase(tok.text, "r") and isAllDigits(tok.text[1..])) {
@@ -214,6 +276,7 @@ fn parseOperand(tokens: []const Token, idx: *usize, kind: isa.OperandKind, diag:
             if (tok.kind == .hash) {
                 return parseHashOperand(tokens, idx, diag);
             }
+
             if (tok.kind == .ident) {
                 if (parseRegisterIndex(tok.text)) |reg_idx| {
                     idx.* += 1;
@@ -242,7 +305,9 @@ fn parseOperand(tokens: []const Token, idx: *usize, kind: isa.OperandKind, diag:
 
                 const name_tok = expectToken(tokens, idx, .ident, diag, "expected label name after '@'") orelse return null;
 
-                return .{ .label_ref = name_tok.text };
+                return .{
+                    .label_ref = name_tok.text,
+                };
             }
             if (tok.kind == .number) {
                 idx.* += 1;
@@ -264,7 +329,13 @@ fn parseOperand(tokens: []const Token, idx: *usize, kind: isa.OperandKind, diag:
     }
 }
 
-fn expectToken(tokens: []const Token, idx: *usize, comptime expected: Kind, diag: *dia.Diag, comptime msg: []const u8) ?Token {
+fn expectToken(
+    tokens: []const Token,
+    idx: *usize,
+    comptime expected: Kind,
+    diag: *dia.Diag,
+    comptime msg: []const u8,
+) ?Token {
     const tok = peek(tokens, idx.*);
 
     if (tok.kind == expected) {
@@ -292,10 +363,13 @@ fn parseRegisterIndex(text: []const u8) ?u4 {
     if (!std.ascii.startsWithIgnoreCase(text, "r")) return null;
 
     const digits = text[1..];
+
     if (digits.len == 0 or !isAllDigits(digits)) return null;
 
     var v: u32 = 0;
+
     for (digits) |c| v = v * 10 + (c - '0');
+
     if (v > 15) return null;
 
     return @intCast(v);
