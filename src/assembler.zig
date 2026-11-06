@@ -9,38 +9,48 @@ pub const dia = @import("dia");
 
 pub const Image = rom.Image;
 
-pub const AssembleError = error{ AssembleFailed, OutOfMemory };
+pub const AssembleError = error{
+    AssembleFailed,
+    OutOfMemory,
+};
 
 pub fn assemble(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) AssembleError!Image {
     const tokens = lexer.lex(alloc, diag, src) catch |e| switch (e) {
         error.OutOfMemory => return error.OutOfMemory,
         error.LexError => return error.AssembleFailed,
     };
+
     if (diag.hasErrors()) return error.AssembleFailed;
 
     const items = parser.parse(alloc, diag, tokens.items) catch |e| switch (e) {
         error.OutOfMemory => return error.OutOfMemory,
         error.ParseError => return error.AssembleFailed,
     };
+
     if (diag.hasErrors()) return error.AssembleFailed;
 
     var sym = symbols.analyze(alloc, diag, items.items) catch |e| switch (e) {
         error.OutOfMemory => return error.OutOfMemory,
         error.AnalyzeError => return error.AssembleFailed,
     };
+
     if (diag.hasErrors()) return error.AssembleFailed;
 
     const words = codegen.generate(alloc, diag, &sym, items.items) catch |e| switch (e) {
         error.OutOfMemory => return error.OutOfMemory,
         error.CodegenError => return error.AssembleFailed,
     };
+
     if (diag.hasErrors()) return error.AssembleFailed;
 
     var image: Image = undefined;
+
     if (words.items.len > rom.IMAGE_WORDS) {
         diag.err(1, 1, "program too long (exceeds 256 instructions)", .{});
+
         return error.AssembleFailed;
     }
+
     rom.pack(words.items, &image);
 
     return image;
@@ -72,11 +82,13 @@ export fn fourb_assemble(
 
     const image = assemble(alloc, &diag, source) catch {
         writeErrors(&diag, err_buf, err_cap);
+
         return 1;
     };
 
     if (diag.hasErrors()) {
         writeErrors(&diag, err_buf, err_cap);
+
         return 1;
     }
 
@@ -106,13 +118,19 @@ fn writeErrors(diag: *const dia.Diag, buf: ?[*]u8, cap: usize) void {
 test "fourb_assemble assembles valid source and reports errors" {
     var out: Image = undefined;
 
-    try std.testing.expectEqual(0, fourb_assemble("t.4a", "jmp @h\n@h:\nnop\n", 15, &out, null, 0));
+    try std.testing.expectEqual(
+        0,
+        fourb_assemble("t.4a", "jmp @h\n@h:\nnop\n", 15, &out, null, 0),
+    );
     try std.testing.expectEqual(0x00, out[0]);
     try std.testing.expectEqual(0x0C, out[1]);
 
     var err_buf: [256]u8 = undefined;
 
-    try std.testing.expectEqual(1, fourb_assemble("t.4a", "jmp @nowhere\n", 13, &out, &err_buf, err_buf.len));
+    try std.testing.expectEqual(
+        1,
+        fourb_assemble("t.4a", "jmp @nowhere\n", 13, &out, &err_buf, err_buf.len),
+    );
 
     const msg = std.mem.sliceTo(&err_buf, 0);
 
@@ -283,6 +301,7 @@ test "const substitution" {
 
     var diag = dia.Diag.init(alloc, "<test>", "const N = 8\nlda #N\n");
     const image = try assemble(alloc, &diag, "const N = 8\nlda #N\n");
+
     try std.testing.expectEqual(0, diag.errors.items.len);
     // lda #8 -> 0x380, same bytes as the pack unit test.
     try std.testing.expectEqual(0x80, image[0]);
@@ -300,10 +319,13 @@ test "names are case-insensitive" {
 
     var diag = dia.Diag.init(alloc, "<test>", src);
     const image = try assemble(alloc, &diag, src);
+
     try std.testing.expectEqual(0, diag.errors.items.len);
 
     var expected: Image = undefined;
+
     rom.pack(&[_]u16{ 0xB00, 0x380, 0xC00 }, &expected);
+
     try std.testing.expectEqualSlices(u8, &expected, &image);
 
     try assembleExpectError("@Foo:\n@FOO:\n", "already defined");
@@ -318,6 +340,7 @@ test "negative: program too long" {
 
     var src = std.ArrayList(u8).empty;
     var i: usize = 0;
+
     while (i < 257) : (i += 1) try src.appendSlice(alloc, "nop\n");
 
     try assembleExpectError(src.items, "too long");
