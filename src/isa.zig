@@ -130,7 +130,11 @@ pub fn encode(op: Op, a: u4, b: u4) u16 {
     return (@as(u16, @backingInt(op)) << 8) | (@as(u16, a) << 4) | @as(u16, b);
 }
 
-pub const Decoded = struct { op: Op, a: u4, b: u4 };
+pub const Decoded = struct {
+    op: Op,
+    a: u4,
+    b: u4,
+};
 
 pub fn decode(word: u16) Decoded {
     return .{
@@ -143,22 +147,29 @@ pub fn decode(word: u16) Decoded {
 test "all 16 opcodes covered, inc shared with dec" {
     var seen: [16]bool = @splat(false);
     var dups: usize = 0;
+
     for (specs) |s| {
         const i: usize = @backingInt(s.op);
+
         if (seen[i]) dups += 1;
+
         seen[i] = true;
     }
+
     // Only lda_imm shares its mnemonic; every other opcode has a spec,
     // and exactly one opcode (inc/dec, 0x5) has two spellings.
     for (seen, 0..) |s, i| {
         if (i == @backingInt(Op.lda_imm)) continue;
+
         try std.testing.expect(s);
     }
+
     try std.testing.expectEqual(1, dups);
 }
 
 test "lookupSpec finds dec, sharing opcode 0x5 with inc" {
     const dec = lookupSpec("DEC").?;
+
     try std.testing.expectEqual(Op.inc, dec.op);
     try std.testing.expectEqualStrings("dec", dec.mnemonic);
     try std.testing.expectEqual(0x510, encode(dec.op, 1, 0));
@@ -183,8 +194,10 @@ test "decode round-trips encode" {
         .nop,  .lda_mem, .sta,  .lda_imm, .read, .inc,  .cls,  .shl, .shr,
         .peek, .flip,    .flag, .jmp,     .ifeq, .ifgt, .iflt,
     };
+
     for (ops) |op| {
         const d = decode(encode(op, 1, 2));
+
         try std.testing.expectEqual(op, d.op);
         try std.testing.expectEqual(1, d.a);
         try std.testing.expectEqual(2, d.b);
