@@ -41,7 +41,15 @@ fn hexVal(c: u8) u8 {
     return c - 'A' + 10;
 }
 
-fn pushSingle(tokens: *std.ArrayList(Token), alloc: std.mem.Allocator, src: []const u8, i: *usize, line: u32, col: *u32, kind: Kind) !void {
+fn pushSingle(
+    tokens: *std.ArrayList(Token),
+    alloc: std.mem.Allocator,
+    src: []const u8,
+    i: *usize,
+    line: u32,
+    col: *u32,
+    kind: Kind,
+) !void {
     try tokens.append(alloc, .{
         .kind = kind,
         .text = src[i.* .. i.* + 1],
@@ -49,13 +57,18 @@ fn pushSingle(tokens: *std.ArrayList(Token), alloc: std.mem.Allocator, src: []co
         .line = line,
         .col = col.*,
     });
+
     i.* += 1;
     col.* += 1;
 }
 
 pub const LexError = error{ LexError, OutOfMemory };
 
-pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!std.ArrayList(Token) {
+pub fn lex(
+    alloc: std.mem.Allocator,
+    diag: *dia.Diag,
+    src: []const u8,
+) LexError!std.ArrayList(Token) {
     var tokens = std.ArrayList(Token).empty;
     var i: usize = 0;
     var line: u32 = 1;
@@ -75,48 +88,57 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
             i += 1;
             line += 1;
             col = 1;
+
             continue;
         }
 
         if (c == '\r') {
             i += 1;
             col += 1;
+
             continue;
         }
 
         if (c == ';') {
             while (i < src.len and src[i] != '\n') i += 1;
+
             continue;
         }
 
         if (c == ' ' or c == '\t') {
             i += 1;
             col += 1;
+
             continue;
         }
 
         if (c == '@') {
             try pushSingle(&tokens, alloc, src, &i, line, &col, .at);
+
             continue;
         }
 
         if (c == '#') {
             try pushSingle(&tokens, alloc, src, &i, line, &col, .hash);
+
             continue;
         }
 
         if (c == ',') {
             try pushSingle(&tokens, alloc, src, &i, line, &col, .comma);
+
             continue;
         }
 
         if (c == ':') {
             try pushSingle(&tokens, alloc, src, &i, line, &col, .colon);
+
             continue;
         }
 
         if (c == '=') {
             try pushSingle(&tokens, alloc, src, &i, line, &col, .equals);
+
             continue;
         }
 
@@ -151,26 +173,36 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
                     2 => d == '0' or d == '1',
                     else => unreachable,
                 };
+
                 if (!valid) break;
+
                 started = true;
+
                 const hi = @mulWithOverflow(value, radix);
                 const lo = @addWithOverflow(hi[0], hexVal(d));
+
                 if (hi[1] != 0 or lo[1] != 0) {
                     diag.err(start_line, start_col, "numeric literal out of range", .{});
+
                     return error.LexError;
                 }
+
                 value = lo[0];
                 i += 1;
                 col += 1;
             }
 
             if (!started) {
-                diag.err(start_line, start_col, "expected digits after '{s}'", .{src[start..i]});
+                diag.err(start_line, start_col, "expected digits after '{s}'", .{
+                    src[start..i],
+                });
+
                 return error.LexError;
             }
 
             if (i < src.len and isIdentCont(src[i])) {
                 diag.err(start_line, start_col, "invalid digit in numeric literal", .{});
+
                 return error.LexError;
             }
 
@@ -189,10 +221,12 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
             const start = i;
             const start_line = line;
             const start_col = col;
+
             while (i < src.len and isIdentCont(src[i])) {
                 i += 1;
                 col += 1;
             }
+
             try tokens.append(alloc, .{
                 .kind = .ident,
                 .text = src[start..i],
@@ -200,10 +234,12 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
                 .line = start_line,
                 .col = start_col,
             });
+
             continue;
         }
 
         diag.err(line, col, "unexpected character '{c}'", .{c});
+
         return error.LexError;
     }
 
@@ -216,6 +252,7 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
             .col = col,
         });
     }
+
     try tokens.append(alloc, .{
         .kind = .eof,
         .text = "",
@@ -228,10 +265,10 @@ pub fn lex(alloc: std.mem.Allocator, diag: *dia.Diag, src: []const u8) LexError!
 }
 
 fn expectTokens(src: []const u8, expected: []const Kind) !void {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
 
-    var diag = dia.Diag.init(arena.allocator(), "<test>", src);
+    var diag: dia.Diag = .init(arena.allocator(), "<test>", src);
 
     const tokens = try lex(arena.allocator(), &diag, src);
 
@@ -248,32 +285,57 @@ fn expectTokens(src: []const u8, expected: []const Kind) !void {
 }
 
 test "basic tokens" {
-    try expectTokens("lda #8", &.{ .ident, .hash, .number, .eol, .eof });
+    try expectTokens("lda #8", &.{
+        .ident,
+        .hash,
+        .number,
+        .eol,
+        .eof,
+    });
 }
 
 test "label syntax" {
-    try expectTokens("@foo:", &.{ .at, .ident, .colon, .eol, .eof });
+    try expectTokens("@foo:", &.{
+        .at,
+        .ident,
+        .colon,
+        .eol,
+        .eof,
+    });
 }
 
 test "numbers hex and binary" {
-    try expectTokens("0xF 0b1010", &.{ .number, .number, .eol, .eof });
+    try expectTokens("0xF 0b1010", &.{
+        .number,
+        .number,
+        .eol,
+        .eof,
+    });
 }
 
 test "comments ignored" {
-    try expectTokens("lda ;comment\n", &.{ .ident, .eol, .eof });
+    try expectTokens("lda ;comment\n", &.{
+        .ident,
+        .eol,
+        .eof,
+    });
 }
 
 test "empty line" {
-    try expectTokens("\n", &.{ .eol, .eof });
+    try expectTokens("\n", &.{
+        .eol,
+        .eof,
+    });
 }
 
 fn expectLexError(src: []const u8) !void {
-    var arena = std.heap.ArenaAllocator.init(std.testing.allocator);
+    var arena: std.heap.ArenaAllocator = .init(std.testing.allocator);
     defer arena.deinit();
 
-    var diag = dia.Diag.init(arena.allocator(), "<test>", src);
+    var diag: dia.Diag = .init(arena.allocator(), "<test>", src);
 
     const result = lex(arena.allocator(), &diag, src);
+
     try std.testing.expectError(error.LexError, result);
     try std.testing.expect(diag.hasErrors());
 }
