@@ -36,6 +36,7 @@ fn isHexDigit(c: u8) bool {
 
 fn hexVal(c: u8) u8 {
     if (std.ascii.isDigit(c)) return c - '0';
+
     if (c >= 'a' and c <= 'f') return c - 'a' + 10;
 
     return c - 'A' + 10;
@@ -85,6 +86,7 @@ pub fn lex(
                 .line = line,
                 .col = col,
             });
+
             i += 1;
             line += 1;
             col = 1;
