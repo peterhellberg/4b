@@ -57,47 +57,9 @@ $ zig build run -- examples/move.4c
 ## Building
 
 Everything is built with [Zig](https://ziglang.org); no separate C build
-system is needed. raylib is fetched automatically via the Zig package
-manager and built from source.
-
-<details>
-<summary><strong>Getting the pinned Zig compiler</strong>
-(<code>0.17.0-dev.387+31f157d80</code>)</summary>
-
-This version is no longer available from the main Zig download server;
-download it from the hexops community mirror instead:
-
-| Platform        | Download                                                                                                                        |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Linux x86_64    | [zig-x86_64-linux-0.17.0-dev.387+31f157d80.tar.xz](https://pkg.hexops.org/zig/zig-x86_64-linux-0.17.0-dev.387+31f157d80.tar.xz) |
-| Linux aarch64   | [zig-aarch64-linux-0.17.0-dev.387+31f157d80.tar.xz](https://pkg.hexops.org/zig/zig-aarch64-linux-0.17.0-dev.387+31f157d80.tar.xz) |
-| macOS x86_64    | [zig-x86_64-macos-0.17.0-dev.387+31f157d80.tar.xz](https://pkg.hexops.org/zig/zig-x86_64-macos-0.17.0-dev.387+31f157d80.tar.xz) |
-| macOS aarch64   | [zig-aarch64-macos-0.17.0-dev.387+31f157d80.tar.xz](https://pkg.hexops.org/zig/zig-aarch64-macos-0.17.0-dev.387+31f157d80.tar.xz) |
-| Windows x86_64  | [zig-x86_64-windows-0.17.0-dev.387+31f157d80.zip](https://pkg.hexops.org/zig/zig-x86_64-windows-0.17.0-dev.387+31f157d80.zip) |
-| Windows aarch64 | [zig-aarch64-windows-0.17.0-dev.387+31f157d80.zip](https://pkg.hexops.org/zig/zig-aarch64-windows-0.17.0-dev.387+31f157d80.zip) |
-
-Unpack the archive and put the `zig` binary on your `PATH`, e.g. on
-Linux/macOS:
-
-```console
-tar -xf zig-*-0.17.0-dev.387+31f157d80.tar.xz -C "$HOME/.local/"
-export PATH="$HOME/.local/zig-x86_64-linux-0.17.0-dev.387+31f157d80:$PATH"
-```
-
-On Windows, unzip the archive and add the extracted folder to `PATH`.
-
-Each download has a companion `.minisig` signature which can be verified
-against the Zig Software Foundation public key
-(`RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U`, see
-<https://ziglang.org/download>):
-
-```console
-curl -sSO https://pkg.hexops.org/zig/zig-x86_64-macos-0.17.0-dev.387+31f157d80.tar.xz.minisig
-minisign -Vm zig-x86_64-macos-0.17.0-dev.387+31f157d80.tar.xz \
-    -P RWSGOq2NVecA2UPNdBUZykf1CCb147pkmdtYxgb3Ti+JO/wCYvhbAb/U
-```
-
-</details>
+system is needed. Install Zig 0.17.1 or newer from
+<https://ziglang.org/download>. raylib is fetched automatically via the Zig
+package manager and built from source.
 
 ### Commands
 

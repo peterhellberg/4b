@@ -2,7 +2,7 @@
     .name = .fourb,
     .version = "0.1.0",
     .fingerprint = 0x5f9a231eb83ef793,
-    .minimum_zig_version = "0.17.0-dev.387+31f157d80",
+    .minimum_zig_version = "0.17.1",
     .dependencies = .{
         .raylib = .{
             .url = "https://github.com/raysan5/raylib/archive/cc4430cd1abda9657fb9c4ef5c3d8e94c023bb0f.tar.gz",

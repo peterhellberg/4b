@@ -3,9 +3,8 @@
 Companion to `docs/4AL.md`.
 
 `4a` assembles a `4A` source file (`.4a`) into a raw 384-byte program image
-(`.4b`) that the 4B box can run. Implementation language: **Zig
-0.17.0-dev.387+31f157d80** (the pinned toolchain for this project). Binary
-name: **`4a`**.
+(`.4b`) that the 4B box can run. Implementation language: **Zig 0.17.1** (the pinned toolchain for this
+project). Binary name: **`4a`**.
 
 ## 1. Goals
 
@@ -75,9 +74,9 @@ The assembler is also embedded in the `4b` box as a static library
     test/golden/      # *.4a golden sources; expected bytes live in assembler.zig
 ```
 
-## 6. Build (Zig 0.17.0-dev.387+31f157d80)
+## 6. Build (Zig 0.17.1)
 
-The toolchain is pinned to **`0.17.0-dev.387+31f157d80`**; recorded in
+The toolchain is pinned to **`0.17.1`**; recorded in
 `build.zig.zon`. `zig build` installs all three binaries (`4a`, `4c`,
 `4b`) into `zig-out/bin/`. Steps:
 
@@ -98,11 +97,9 @@ The box links against three Zig static libraries built from this repo:
 `4c/compiler.zig` (the compiler), each exposing a C-ABI entry point;
 raylib is fetched by the Zig package manager and built from source.
 
-> **Note.** `0.17.0-dev.387+31f157d80` sits mid-stream of the `std.Io`
-> rewrite and the `ArrayList` unmanaged/managed merge; std APIs can shift
-> between dev builds. The pin above is the contract: code against it, and keep
-> file I/O isolated in `4a.zig` so any future bump touches one file. `zig
-> build`, `zig build test`, and `zig build run -- file.4b` should "just work".
+> **Note.** Keep file I/O isolated in `4a.zig` and `4c.zig` so a future Zig
+> bump touches one file. `zig build`, `zig build test`, and
+> `zig build run -- file.4b` should "just work".
 
 ## 7. Pipeline
 
@@ -325,12 +322,11 @@ their own suites to the same `zig build test` step.
 An end-to-end sanity check (manual): run a golden ROM in the box and
 confirm the middle row of pixels lights up.
 
-## 16. Zig 0.17.0-dev.387+31f157d80 notes and risks
+## 16. Zig 0.17.1 notes and risks
 
-- Toolchain is pinned to **`0.17.0-dev.387+31f157d80`** (recorded in
-  `build.zig.zon`); std APIs are churning (`std.Io` writer/reader types,
-  `std.ArrayList` unmanaged/managed merge, build API). Keep I/O in `4a.zig`
-  and the ISA/bit layout in `isa.zig`/`rom.zig` so churn is localized.
+- Toolchain is pinned to stable **`0.17.1`** (recorded in `build.zig.zon`).
+  Keep I/O in `4a.zig` and `4c.zig`, and the ISA/bit layout in
+  `isa.zig`/`rom.zig`, so a future bump is localized.
 - **ROM byte-order**: the canonical packing (§12) is LSB-first and is
   confirmed by the bundled VM (`fourb_vm_load_rom` unpacks the same layout) and by
   golden tests; if another 4BoD reimplementation differs, flip it inside

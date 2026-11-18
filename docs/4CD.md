@@ -5,8 +5,7 @@ Companion to `docs/4CL.md`.
 `4c` compiles a 4C source file (`.4c`) into a raw 384-byte program image
 (`.4b`) that the 4B box can run — or, on request, into equivalent `.4a`
 assembly text that `4a` reassembles byte-for-byte. Implementation language:
-**Zig 0.17.0-dev.387+31f157d80** (the pinned toolchain for this project).
-Binary name: **`4c`**.
+**Zig 0.17.1** (the pinned toolchain for this project). Binary name: **`4c`**.
 
 ## 1. Goals
 
@@ -81,7 +80,7 @@ run step (`zig build 4c -- args`), extra suites joined into
 `zig build test`, and an extended `examples` step that compiles
 `examples/*.4c` next to the existing `*.4a` assemblies.
 
-## 6. Build (Zig 0.17.0-dev.387+31f157d80)
+## 6. Build (Zig 0.17.1)
 
 Same pinned toolchain as the 4A design (`docs/4AD.md` §6); after this change
 `zig build` installs `4a`, `4b`, and `4c` into `zig-out/bin/`.
@@ -397,9 +396,8 @@ how the lowering bugs in §18 were found), and
 
 ## 17. Zig pin notes and risks
 
-- Toolchain pinned to `0.17.0-dev.387+31f157d80`; std churn notes from
-  `docs/4AD.md` §16 apply verbatim (keep I/O in `4c.zig`; isolate layout
-  knowledge).
+- Toolchain pinned to stable `0.17.1`; the notes from `docs/4AD.md` §16 apply
+  (keep I/O in `4c.zig`; isolate layout knowledge).
 - Reusing `rom.zig`/`dia.zig` across both tools is deliberate: one
   packing implementation, one diagnostic format, tested twice.
 - The scratch-discipline proof rests on the §4.2 language restrictions;
