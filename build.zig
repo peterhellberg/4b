@@ -14,6 +14,18 @@ pub fn build(b: *std.Build) void {
     const isa_mod = zigModule(b, "src/isa.zig", target, optimize);
     const rom_mod = zigModule(b, "src/rom.zig", target, optimize);
 
+    // 4d's decoder reuses isa.decode and rom.unpack, so it cannot drift
+    // away from the assembler/VM encoding.
+    const dis_mod = b.createModule(.{
+        .root_source_file = b.path("src/disassembler.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "isa", .module = isa_mod },
+            .{ .name = "rom", .module = rom_mod },
+        },
+    });
+
     const shared_imports = [_]std.Build.Module.Import{
         .{ .name = "dia", .module = dia_mod },
         .{ .name = "isa", .module = isa_mod },
@@ -43,6 +55,21 @@ pub fn build(b: *std.Build) void {
         .imports = &com_imports,
     });
 
+    // Round-trip tests: 4b -> 4d -> 4a -> bytes. Kept in their own module so
+    // `zig build dis-roundtrip` can run them without the rest of the suite.
+    const rt_mod = b.createModule(.{
+        .root_source_file = b.path("src/test/roundtrip.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "assembler", .module = asm_mod },
+            .{ .name = "dia", .module = dia_mod },
+            .{ .name = "disassembler", .module = dis_mod },
+            .{ .name = "rom", .module = rom_mod },
+            .{ .name = "roms", .module = zigModule(b, "examples/roms.zig", target, optimize) },
+        },
+    });
+
     // ---- 4a assembler -----------------------------------------------------------
     const assembler = b.addExecutable(.{
         .name = "4a",
@@ -57,6 +84,21 @@ pub fn build(b: *std.Build) void {
         }),
     });
     b.installArtifact(assembler);
+
+    // ---- 4d disassembler ------------------------------------------------------
+    const disassembler = b.addExecutable(.{
+        .name = "4d",
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/4d.zig"),
+            .target = target,
+            .optimize = optimize,
+            .imports = &.{
+                .{ .name = "disassembler", .module = dis_mod },
+                .{ .name = "rom", .module = rom_mod },
+            },
+        }),
+    });
+    b.installArtifact(disassembler);
 
     // ---- 4b box (C + Zig VM/assembler/compiler + C raylib) ------------------
     const vm_lib = b.addLibrary(.{
@@ -116,6 +158,7 @@ pub fn build(b: *std.Build) void {
 
     // ---- run steps ----------------------------------------------------------
     addRunStep(b, assembler, "4a", "Assemble with 4a", "assemble");
+    addRunStep(b, disassembler, "4d", "Disassemble with 4d", "disassemble");
     addRunStep(b, compiler, "4c", "Compile with 4c", "compile");
     addRunStep(b, box, "4b", "Run with 4b", "run");
 
@@ -124,6 +167,8 @@ pub fn build(b: *std.Build) void {
 
     const suites = [_]*std.Build.Module{
         assembler.root_module, // CLI + golden/negative assembler tests
+        disassembler.root_module, // 4d CLI tests
+        dis_mod, // decode + format tests
         asm_mod, // assembler pipeline tests
         rom_mod, // bit-packing tests
         dia_mod, // diagnostics tests
@@ -138,6 +183,14 @@ pub fn build(b: *std.Build) void {
         const run_suite_tests = b.addRunArtifact(suite_tests);
         test_step.dependOn(&run_suite_tests.step);
     }
+
+    // ---- disassembly round trip ----------------------------------------------
+    const roundtrip_tests = b.addTest(.{ .root_module = rt_mod });
+    const run_roundtrip_tests = b.addRunArtifact(roundtrip_tests);
+
+    const dis_roundtrip_step = b.step("dis-roundtrip", "Round-trip every example ROM through 4d and 4a");
+    dis_roundtrip_step.dependOn(&run_roundtrip_tests.step);
+    test_step.dependOn(&run_roundtrip_tests.step);
 
     // ---- examples ---------------------------------------------------------------
     const examples_step = b.step("examples", "Assemble/compile example ROMs");

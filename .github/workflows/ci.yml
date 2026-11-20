@@ -47,7 +47,7 @@ jobs:
             libgl-dev libx11-dev libxrandr-dev \
             libxinerama-dev libxi-dev libxcursor-dev
 
-      # The test and examples steps only touch the 4a/4c tools; build
+      # The test and examples steps only touch the 4a/4c/4d tools; build
       # everything (including the 4b box with its C and raylib sources)
       # so box/C-ABI drift fails here instead of only locally.
       - name: Build all
