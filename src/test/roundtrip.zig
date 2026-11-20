@@ -26,7 +26,19 @@ const example_roms = [_]Case{
 };
 
 fn roundTrip(alloc: std.mem.Allocator, image: *const rom.Image, labels: bool) !void {
-    const text = try disassembler.disassemble(alloc, image, .{ .labels = labels });
+    return roundTripStyle(alloc, image, labels, .positional);
+}
+
+fn roundTripStyle(
+    alloc: std.mem.Allocator,
+    image: *const rom.Image,
+    labels: bool,
+    style: disassembler.LabelStyle,
+) !void {
+    const text = try disassembler.disassemble(alloc, image, .{
+        .labels = labels,
+        .label_style = style,
+    });
 
     var diag = dia.Diag.init(alloc, "<roundtrip>", text);
     defer diag.deinit();
@@ -40,7 +52,11 @@ fn roundTrip(alloc: std.mem.Allocator, image: *const rom.Image, labels: bool) !v
     };
 
     if (!std.mem.eql(u8, image, &rebuilt)) {
-        std.debug.print("round trip differs (labels={}):\n{s}", .{ labels, text });
+        std.debug.print("round trip differs (labels={}, style={s}):\n{s}", .{
+            labels,
+            @tagName(style),
+            text,
+        });
         return error.RoundTripFailed;
     }
 }
@@ -62,6 +78,7 @@ test "round trip every example ROM" {
 
         try roundTrip(alloc, &image, true);
         try roundTrip(alloc, &image, false);
+        try roundTripStyle(alloc, &image, true, .semantic);
     }
 }
 
@@ -86,6 +103,7 @@ test "round trip assembler golden sources" {
 
         try roundTrip(alloc, &image, true);
         try roundTrip(alloc, &image, false);
+        try roundTripStyle(alloc, &image, true, .semantic);
     }
 }
 
@@ -112,6 +130,7 @@ test "round trip edge cases" {
         const image = imageFrom(words);
         try roundTrip(alloc, &image, true);
         try roundTrip(alloc, &image, false);
+        try roundTripStyle(alloc, &image, true, .semantic);
     }
 
     // A branch target at the very last instruction.
@@ -122,10 +141,12 @@ test "round trip edge cases" {
 
     try roundTrip(alloc, &far, true);
     try roundTrip(alloc, &far, false);
+    try roundTripStyle(alloc, &far, true, .semantic);
 
     // An operand value that collides with a label address must still print
     // as a numeric immediate rather than a label.
     const collide = imageFrom(&.{ 0xB00, 0x300, 0xC00 });
     try roundTrip(alloc, &collide, true);
     try roundTrip(alloc, &collide, false);
+    try roundTripStyle(alloc, &collide, true, .semantic);
 }

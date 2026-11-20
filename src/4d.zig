@@ -6,6 +6,7 @@ const Options = struct {
     input: ?[]const u8 = null,
     output: ?[]const u8 = null,
     labels: bool = true,
+    label_style: disassembler.LabelStyle = .semantic,
 };
 
 pub fn main(args: std.process.Init) !u8 {
@@ -25,6 +26,15 @@ pub fn main(args: std.process.Init) !u8 {
             opts.labels = true;
         } else if (std.mem.eql(u8, arg, "-L") or std.mem.eql(u8, arg, "--no-labels")) {
             opts.labels = false;
+        } else if (std.mem.eql(u8, arg, "-s") or
+            std.mem.eql(u8, arg, "--semantic-labels") or
+            std.mem.eql(u8, arg, "--heuristic-labels"))
+        {
+            opts.label_style = .semantic;
+        } else if (std.mem.eql(u8, arg, "-p") or
+            std.mem.eql(u8, arg, "--positional-labels"))
+        {
+            opts.label_style = .positional;
         } else if (std.mem.eql(u8, arg, "-o") or std.mem.eql(u8, arg, "--output")) {
             opts.output = it.next() orelse {
                 std.debug.print("error: missing argument for {s}\n", .{arg});
@@ -96,6 +106,7 @@ pub fn main(args: std.process.Init) !u8 {
 
     const text = disassembler.disassemble(alloc, &image, .{
         .labels = opts.labels,
+        .label_style = opts.label_style,
     }) catch {
         std.debug.print("error: out of memory\n", .{});
 
@@ -246,7 +257,9 @@ fn printUsage() void {
         \\  -o, --output <file>   output assembly path (default: <input stem>.4a, or stdout if it exists)
         \\                        use '-' to write to stdout explicitly
         \\  -l, --labels          emit labels for branch targets (default: on)
-        \\  -L, --no-labels       emit raw addresses instead of labels
+        \\  -L, --no-labels       emit raw flag slots instead of labels
+        \\  -s, --semantic-labels infer semantic names (default; alias: --heuristic-labels)
+        \\  -p, --positional-labels emit @Lxx names instead of inferred names
         \\  -h, --help            print usage and exit
         \\
     , .{});
