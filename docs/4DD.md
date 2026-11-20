@@ -39,6 +39,8 @@ example ROM.
                         use '-' to write to stdout explicitly
   -l, --labels          emit labels for branch targets (default: on)
   -L, --no-labels       emit raw flag slots instead of labels
+  -s, --semantic-labels infer semantic names (default; alias: --heuristic-labels)
+  -p, --positional-labels emit @Lxx names instead of inferred names
   -h, --help            print usage and exit
 ```
 
@@ -98,9 +100,36 @@ Consequences for disassembly:
 
 Pass 1 therefore walks the words in address order and claims a flag word as
 a label only when its slot equals the number of labels emitted so far.
-Everything else stays raw. Names are deterministic: `@L00`, `@L01`, …,
-matching the slot number. With `-L`, pass 1 is skipped entirely and all
+Everything else stays raw. With `-L`, pass 1 is skipped entirely and all
 branch operands print as raw slot numbers.
+
+### 6.1 Label names
+
+By default, a second pass infers a name from the label's control-flow role.
+`-s`/`--semantic-labels` requests this explicitly; `-p`/`--positional-labels`
+selects deterministic `@L00`, `@L01`, … names matching the slot number.
+
+| Evidence | Name | Meaning |
+| -------- | ---- | ------- |
+| Jump to the label is its only non-`nop` body | `@halt` | Infinite idle loop |
+| Label is at address 0 | `@start` | Program entry point |
+| Label has no body before the next label | `@entry` | Compiler entry flag |
+| Block has `cls` plus `flip` or `read` | `@frame` | Clear-and-redraw frame |
+| First operation is `flip` | `@draw` | Pixel drawing block |
+| First operation is `cls` | `@clear` | Screen clear block |
+| First operation is `read` | `@input` | Button input block |
+| Block starts `lda rN; inc; sta rN` | `@inc_rN` | Register increment |
+| Block starts `lda rN; dec; sta rN` | `@dec_rN` | Register decrement |
+| Backward jump from the final instruction | `@restart` | Outer reset loop |
+| Any other backward jump | `@loop` | Back edge |
+| Unconditional forward jump targets it | `@target` | Generic jump target |
+| Forward jump guarded by `if*` targets it | `@done` | Conditional skip exit |
+| No recognized incoming jump or operation | `@Lxx` | Positional fallback |
+
+Repeated roles are numbered from 2 (`@loop2`, `@done2`, …). These names are
+heuristics: ROMs do not store source identifiers, so the names describe the
+jump structure, not the original author's intent. They never affect the
+assembled bytes because only the label spelling changes.
 
 One further subtlety: `flag @name` *defines* a label in 4A, so a non-label
 flag word must always use the numeric `flag N` form, even if another address
@@ -158,8 +187,9 @@ handles all sixteen. Words with unusual nibble patterns are rendered via
 | `zig build dis-roundtrip` | only the round-trip tests |
 | `zig build 4d -- …` | run the disassembler (alias: `zig build disassemble -- …`) |
 
-The round-trip suite covers every `examples/*.4b` image (both with labels and
-with `-L`), every assembler golden source, and hand-written edge cases:
+The round-trip suite covers every `examples/*.4b` image (with positional
+labels, semantic labels and `-L`), every assembler golden source, and
+hand-written edge cases:
 all-zero ROM, branch at address 0 and 255, non-sequential flag slots, two
 flags sharing a slot, reserved slot 15, `dec`/`inc` extensions, non-zero
 unused nibbles, raw `dw` data, and an immediate value colliding with a label

@@ -19,6 +19,12 @@
 //! byte-identical even for ROMs that do not follow the usual slot pattern;
 //! it is the round-trip guarantee that matters, not pretty labels.
 //!
+//! Labels are named from control-flow roles and nearby operations by default
+//! (`@halt`, `@loop`, `@draw`, `@frame`, `@inc_r3`, …). The optional
+//! positional style uses stable slot-derived names (`@L00`, `@L01`, …).
+//! Semantic names describe the code, not the original source identifiers,
+//! which are not stored in the ROM.
+//!
 //! The output is a clean 4A listing: one instruction per line, with operand
 //! alignment but no comments or address annotations. Trailing zero padding
 //! is omitted because `4a` recreates it when packing the image.
@@ -27,11 +33,24 @@ const std = @import("std");
 const isa = @import("isa");
 const rom = @import("rom");
 
+/// How emitted labels are named.
+pub const LabelStyle = enum {
+    /// Deterministic names derived from the flag slot (`@L00`, `@L01`, …).
+    positional,
+
+    /// Infer names from the label's control-flow role. Labels whose role is
+    /// unclear keep their positional name.
+    semantic,
+};
+
 /// Formatting options for `disassemble`.
 pub const Options = struct {
-    /// Emit `@Lxx:` label definitions for reproducible flag slots and use
-    /// them in `jmp` operands. When false, raw slot numbers are printed.
+    /// Emit label definitions for reproducible flag slots and use them in
+    /// `jmp` operands. When false, raw slot numbers are printed.
     labels: bool = true,
+
+    /// Naming scheme for emitted labels. Ignored when `labels` is false.
+    label_style: LabelStyle = .semantic,
 };
 
 pub const DisassembleError = std.mem.Allocator.Error || std.Io.Writer.Error ||
@@ -50,13 +69,6 @@ pub fn disassemble(
     var words: [rom.IMAGE_WORDS]u16 = undefined;
     rom.unpack(image, &words);
 
-    // Pass 1: find the flag words that can be reproduced as labels.
-    const labels = LabelMap.init(&words, options.labels);
-
-    var aw: std.Io.Writer.Allocating = .init(alloc);
-    errdefer aw.deinit();
-    const w = &aw.writer;
-
     // Trailing zero words are indistinguishable from 4a's automatic
     // padding, so stop at the last non-zero word. The image is packed from
     // exactly the emitted words, which reproduces the zero fill.
@@ -64,11 +76,17 @@ pub fn disassemble(
     for (words, 0..) |word, addr| {
         if (word != 0) last = addr;
     }
+    const end = if (last) |addr| addr + 1 else 0;
 
-    if (last) |end| {
-        for (0..end + 1) |addr| {
-            try writeWord(w, addr, words[addr], &labels);
-        }
+    // Pass 1: find the flag words that can be reproduced as labels.
+    const labels = LabelMap.init(&words, end, options);
+
+    var aw: std.Io.Writer.Allocating = .init(alloc);
+    errdefer aw.deinit();
+    const w = &aw.writer;
+
+    for (0..end) |addr| {
+        try writeWord(w, addr, words[addr], &labels);
     }
 
     var list = aw.toArrayList();
@@ -76,20 +94,71 @@ pub fn disassemble(
     return list.items;
 }
 
+/// Maximum length of a generated label, including the `@` sigil.
+const max_label_name_len = 12;
+
+const LabelName = struct {
+    bytes: [max_label_name_len]u8 = undefined,
+    len: usize = 0,
+
+    fn setPositional(self: *LabelName, slot: u4) void {
+        const text = std.fmt.bufPrint(&self.bytes, "@L{X:0>2}", .{slot}) catch unreachable;
+        self.len = text.len;
+    }
+
+    fn setRole(self: *LabelName, role: []const u8, occurrence: usize) void {
+        const text = if (occurrence == 1)
+            std.fmt.bufPrint(&self.bytes, "@{s}", .{role}) catch unreachable
+        else
+            std.fmt.bufPrint(&self.bytes, "@{s}{d}", .{ role, occurrence }) catch unreachable;
+        self.len = text.len;
+    }
+
+    fn get(self: *const LabelName) []const u8 {
+        return self.bytes[0..self.len];
+    }
+};
+
+/// Control-flow evidence collected for one label slot.
+const LabelFacts = struct {
+    halt: bool = false,
+    backward: bool = false,
+    from_end: bool = false,
+    unconditional: bool = false,
+    forward_conditional: bool = false,
+};
+
+/// An operation found near the start of a label's block.
+const LabelContent = union(enum) {
+    frame,
+    draw,
+    clear,
+    input,
+    increment: u4,
+    decrement: u4,
+};
+
 /// flag-slot → address and address → flag-slot maps for emitted labels.
 const LabelMap = struct {
     addr_slot: [rom.IMAGE_WORDS]?u4 = @splat(null),
     slot_addr: [isa.MAX_SLOTS]?u8 = @splat(null),
+    names: [isa.MAX_SLOTS]LabelName = undefined,
+    bases: [isa.MAX_SLOTS][max_label_name_len]u8 = undefined,
+    base_lens: [isa.MAX_SLOTS]usize = @splat(0),
 
-    fn init(words: *const [rom.IMAGE_WORDS]u16, enabled: bool) LabelMap {
+    fn init(words: *const [rom.IMAGE_WORDS]u16, end: usize, options: Options) LabelMap {
         var map = LabelMap{};
-        if (!enabled) return map;
+
+        for (0..isa.MAX_SLOTS) |slot| {
+            map.names[slot].setPositional(@intCast(slot));
+        }
+        if (!options.labels) return map;
 
         // A label emitted as the Nth one in source order gets slot N. Only
         // claim flag words whose slot matches that number.
         var next: u8 = 0;
 
-        for (words, 0..) |word, addr| {
+        for (words[0..end], 0..) |word, addr| {
             const d = isa.decode(word);
 
             if (d.op != .flag) continue;
@@ -102,9 +171,227 @@ const LabelMap = struct {
             next += 1;
         }
 
+        if (options.label_style == .semantic) {
+            map.assignSemanticNames(words, end);
+        }
+
         return map;
     }
+
+    fn nameForSlot(self: *const LabelMap, slot: usize) []const u8 {
+        return self.names[slot].get();
+    }
+
+    fn baseSlice(self: *const LabelMap, slot: usize) []const u8 {
+        return self.bases[slot][0..self.base_lens[slot]];
+    }
+
+    /// Assign a role name, numbering it when the same role was already used.
+    fn assignName(map: *LabelMap, slot: usize, role: []const u8) void {
+        var occurrence: usize = 1;
+
+        for (0..isa.MAX_SLOTS) |other| {
+            if (other == slot or map.base_lens[other] == 0) continue;
+            if (std.mem.eql(u8, map.baseSlice(other), role)) occurrence += 1;
+        }
+
+        @memcpy(map.bases[slot][0..role.len], role);
+        map.base_lens[slot] = role.len;
+        map.names[slot].setRole(role, occurrence);
+    }
+
+    /// Name labels from their role and nearby operations. Original source
+    /// names are unavailable in a ROM, so these are deliberately generic.
+    fn assignSemanticNames(
+        map: *LabelMap,
+        words: *const [rom.IMAGE_WORDS]u16,
+        end: usize,
+    ) void {
+        var facts: [isa.MAX_SLOTS]LabelFacts = @splat(LabelFacts{});
+
+        for (0..end) |addr| {
+            const d = isa.decode(words[addr]);
+            if (d.op != .jmp) continue;
+            if (d.b != 0 or d.a >= isa.MAX_SLOTS) continue;
+
+            const slot: usize = d.a;
+            const target = map.slot_addr[slot] orelse continue;
+            const target_addr: usize = target;
+            const f = &facts[slot];
+
+            if (isHaltLoop(words, map, target_addr, addr)) f.halt = true;
+            if (target_addr <= addr) {
+                f.backward = true;
+                if (end - addr <= 2) f.from_end = true;
+            }
+
+            if (isConditionalJump(words, map, addr)) {
+                if (target_addr > addr) f.forward_conditional = true;
+            } else {
+                f.unconditional = true;
+            }
+        }
+
+        for (0..isa.MAX_SLOTS) |slot| {
+            const label_addr = map.slot_addr[slot] orelse continue;
+            const addr: usize = label_addr;
+            const f = facts[slot];
+
+            var role_buf: [max_label_name_len]u8 = undefined;
+            var role: ?[]const u8 = null;
+
+            if (f.halt) {
+                role = "halt";
+            } else if (addr == 0) {
+                role = "start";
+            } else if (isEmptyBody(words, map, addr, end)) {
+                role = "entry";
+            } else if (labelContent(words, map, addr, end)) |content| {
+                role = switch (content) {
+                    .frame => "frame",
+                    .draw => "draw",
+                    .clear => "clear",
+                    .input => "input",
+                    .increment => |reg| std.fmt.bufPrint(&role_buf, "inc_r{d}", .{reg}) catch unreachable,
+                    .decrement => |reg| std.fmt.bufPrint(&role_buf, "dec_r{d}", .{reg}) catch unreachable,
+                };
+            } else if (f.from_end and f.backward) {
+                role = "restart";
+            } else if (f.backward) {
+                role = "loop";
+            } else if (f.unconditional) {
+                role = "target";
+            } else if (f.forward_conditional) {
+                role = "done";
+            }
+
+            if (role) |r| map.assignName(slot, r);
+        }
+    }
 };
+
+/// A label with no body before the next label is usually a compiler entry
+/// point whose flag is recorded during startup fall-through.
+fn isEmptyBody(
+    words: *const [rom.IMAGE_WORDS]u16,
+    labels: *const LabelMap,
+    addr: usize,
+    end: usize,
+) bool {
+    var at = addr + 1;
+    while (at < end) : (at += 1) {
+        if (labels.addr_slot[at] != null) return true;
+        if (isa.decode(words[at]).op != .nop) return false;
+    }
+
+    return false;
+}
+
+/// Find an operation that describes a label's block. Compiler phase guards
+/// (`lda r14; ifgt r15`) are ignored because neither is a signal. A screen
+/// clear followed by drawing or input is more specifically a frame.
+fn labelContent(
+    words: *const [rom.IMAGE_WORDS]u16,
+    labels: *const LabelMap,
+    addr: usize,
+    end: usize,
+) ?LabelContent {
+    var first: ?ContentMatch = null;
+    var has_clear = false;
+    var has_input = false;
+    var has_draw = false;
+
+    var at = addr + 1;
+    while (at < end) : (at += 1) {
+        if (labels.addr_slot[at] != null) break;
+
+        const d = isa.decode(words[at]);
+        switch (d.op) {
+            .cls => {
+                has_clear = true;
+                noteContent(&first, at, .clear);
+            },
+            .read => {
+                has_input = true;
+                noteContent(&first, at, .input);
+            },
+            .flip => {
+                has_draw = true;
+                noteContent(&first, at, .draw);
+            },
+            .jmp => break,
+            .inc => {
+                if (d.b != 0 or d.a > 1 or at == 0) continue;
+
+                const prev = isa.decode(words[at - 1]);
+                if (prev.op != .lda_mem or prev.b != 0) continue;
+                if (at + 1 >= end) continue;
+
+                const next = isa.decode(words[at + 1]);
+                if (next.op != .sta or next.b != 0 or next.a != prev.a) continue;
+
+                noteContent(&first, at, if (d.a == 1)
+                    .{ .decrement = prev.a }
+                else
+                    .{ .increment = prev.a });
+            },
+            else => {},
+        }
+    }
+
+    if (has_clear and (has_input or has_draw)) return .frame;
+    if (first) |found| return found.content;
+    return null;
+}
+
+const ContentMatch = struct {
+    at: usize,
+    content: LabelContent,
+};
+
+fn noteContent(
+    first: *?ContentMatch,
+    at: usize,
+    content: LabelContent,
+) void {
+    if (first.* == null or at < first.*.?.at) {
+        first.* = .{ .at = at, .content = content };
+    }
+}
+
+/// A jump is a halt loop when it is the only non-label instruction between
+/// its own address and the label it jumps to.
+fn isHaltLoop(
+    words: *const [rom.IMAGE_WORDS]u16,
+    labels: *const LabelMap,
+    target: usize,
+    jump: usize,
+) bool {
+    if (jump <= target) return false;
+
+    for (target + 1..jump) |addr| {
+        if (labels.addr_slot[addr] != null) return false;
+        if (isa.decode(words[addr]).op != .nop) return false;
+    }
+
+    return true;
+}
+
+/// Ignore label words between a conditional skip and the jump it guards.
+fn isConditionalJump(
+    words: *const [rom.IMAGE_WORDS]u16,
+    labels: *const LabelMap,
+    jump: usize,
+) bool {
+    var before = jump;
+    while (before > 0 and labels.addr_slot[before - 1] != null) before -= 1;
+    if (before == 0) return false;
+
+    return switch (isa.decode(words[before - 1]).op) {
+        .ifeq, .ifgt, .iflt => true,
+        else => false,
+    };
+}
 
 fn writeWord(
     w: *std.Io.Writer,
@@ -117,8 +404,10 @@ fn writeWord(
     // A designated label word is printed as a label definition; the
     // assembler recreates the very same flag word for it.
     if (labels.addr_slot[addr]) |slot| {
-        var name_buf: [8]u8 = undefined;
-        const name = try std.fmt.bufPrint(&name_buf, "@L{X:0>2}:", .{slot});
+        var name_buf: [max_label_name_len + 1]u8 = undefined;
+        const name = try std.fmt.bufPrint(&name_buf, "{s}:", .{
+            labels.nameForSlot(slot),
+        });
         return writeLine(w, name, null);
     }
 
@@ -181,7 +470,10 @@ fn writeWord(
             if (d.b != 0 or d.a >= isa.MAX_SLOTS) return writeDw(w, word);
             mnemonic = "jmp";
             if (labels.slot_addr[d.a] != null) {
-                operand = try std.fmt.bufPrint(&op_buf, "@L{X:0>2}", .{d.a});
+                const slot: usize = d.a;
+                operand = try std.fmt.bufPrint(&op_buf, "{s}", .{
+                    labels.nameForSlot(slot),
+                });
             } else {
                 operand = try std.fmt.bufPrint(&op_buf, "{d}", .{d.a});
             }
@@ -258,10 +550,129 @@ test "every opcode renders with a mnemonic" {
 
 test "labels: flag words become labels and jmp uses them" {
     const alloc = std.testing.allocator;
-    const text = try dis(alloc, &.{ 0xB00, 0x380, 0xC00 }, .{});
+    const text = try dis(alloc, &.{ 0xB00, 0x380, 0xC00 }, .{
+        .label_style = .positional,
+    });
     defer alloc.free(text);
 
     try std.testing.expectEqualStrings("@L00:\nlda   #8\njmp   @L00\n", text);
+}
+
+test "semantic labels are the default: self-loop becomes halt" {
+    const alloc = std.testing.allocator;
+    const text = try dis(alloc, &.{ 0xB00, 0xC00 }, .{});
+    defer alloc.free(text);
+
+    try std.testing.expectEqualStrings("@halt:\njmp   @halt\n", text);
+}
+
+test "semantic labels: backward branch becomes loop" {
+    const alloc = std.testing.allocator;
+    const text = try dis(alloc, &.{ 0x000, 0xB00, 0x500, 0xC00, 0x600, 0x600 }, .{
+        .label_style = .semantic,
+    });
+    defer alloc.free(text);
+
+    try std.testing.expectEqualStrings("nop\n@loop:\ninc\njmp   @loop\ncls\ncls\n", text);
+}
+
+test "semantic labels: forward conditional target becomes done" {
+    const alloc = std.testing.allocator;
+    const text = try dis(alloc, &.{ 0xB00, 0xD00, 0xC10, 0x000, 0xB10 }, .{
+        .label_style = .semantic,
+    });
+    defer alloc.free(text);
+
+    try std.testing.expectEqualStrings(
+        "@start:\nifeq  r0\njmp   @done\nnop\n@done:\n",
+        text,
+    );
+}
+
+test "semantic labels: forward unconditional target becomes target" {
+    const alloc = std.testing.allocator;
+    const text = try dis(alloc, &.{ 0xB00, 0xC10, 0x000, 0xB10 }, .{
+        .label_style = .semantic,
+    });
+    defer alloc.free(text);
+
+    try std.testing.expectEqualStrings(
+        "@start:\njmp   @target\nnop\n@target:\n",
+        text,
+    );
+}
+
+test "semantic labels: repeated roles get unique suffixes" {
+    const alloc = std.testing.allocator;
+    const text = try dis(alloc, &.{ 0xB00, 0xC00, 0xB10, 0xC10 }, .{
+        .label_style = .semantic,
+    });
+    defer alloc.free(text);
+
+    try std.testing.expectEqualStrings(
+        "@halt:\njmp   @halt\n@halt2:\njmp   @halt2\n",
+        text,
+    );
+}
+
+test "semantic labels keep positional names for unclear roles" {
+    const alloc = std.testing.allocator;
+    const text = try dis(alloc, &.{ 0x000, 0xB00 }, .{ .label_style = .semantic });
+    defer alloc.free(text);
+
+    try std.testing.expectEqualStrings("nop\n@L00:\n", text);
+}
+
+test "semantic labels: body operations provide names" {
+    const alloc = std.testing.allocator;
+
+    const cases = [_]struct {
+        words: []const u16,
+        expected: []const u8,
+    }{
+        .{ .words = &.{ 0x000, 0xB00, 0xA00 }, .expected = "@draw:" },
+        .{ .words = &.{ 0x000, 0xB00, 0x600 }, .expected = "@clear:" },
+        .{
+            .words = &.{ 0x000, 0xB00, 0x600, 0xA00 },
+            .expected = "@frame:",
+        },
+        .{ .words = &.{ 0x000, 0xB00, 0x400 }, .expected = "@input:" },
+        .{
+            .words = &.{ 0x000, 0xB00, 0x130, 0x500, 0x230 },
+            .expected = "@inc_r3:",
+        },
+        .{
+            .words = &.{ 0x000, 0xB00, 0x130, 0x510, 0x230 },
+            .expected = "@dec_r3:",
+        },
+    };
+
+    for (cases) |c| {
+        const text = try dis(alloc, c.words, .{ .label_style = .semantic });
+        defer alloc.free(text);
+
+        try std.testing.expect(std.mem.indexOf(u8, text, c.expected) != null);
+    }
+}
+
+test "semantic labels: adjacent empty labels become entry points" {
+    const alloc = std.testing.allocator;
+    const text = try dis(alloc, &.{ 0x000, 0xB00, 0xB10 }, .{
+        .label_style = .semantic,
+    });
+    defer alloc.free(text);
+
+    try std.testing.expectEqualStrings("nop\n@entry:\n@L01:\n", text);
+}
+
+test "semantic labels: outer reset jump becomes restart" {
+    const alloc = std.testing.allocator;
+    const text = try dis(alloc, &.{ 0x000, 0xB00, 0x300, 0xC00 }, .{
+        .label_style = .semantic,
+    });
+    defer alloc.free(text);
+
+    try std.testing.expectEqualStrings("nop\n@restart:\nlda   #0\njmp   @restart\n", text);
 }
 
 test "no-labels prints raw flag slots" {
@@ -289,7 +700,9 @@ test "out-of-order flag slots stay raw" {
     const alloc = std.testing.allocator;
     // Slot 2 at word 0 cannot be the first label (it would be renumbered to
     // 0), so it must remain a raw flag. Slot 0 at word 1 can be a label.
-    const text = try dis(alloc, &.{ 0xB20, 0xB00, 0xC20, 0xC00 }, .{});
+    const text = try dis(alloc, &.{ 0xB20, 0xB00, 0xC20, 0xC00 }, .{
+        .label_style = .positional,
+    });
     defer alloc.free(text);
 
     try std.testing.expect(std.mem.indexOf(u8, text, "flag  2") != null);

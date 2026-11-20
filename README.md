@@ -122,14 +122,21 @@ Options:
   -o, --output <file>   output assembly path (default: <input stem>.4a, or stdout if it exists)
                         use '-' to write to stdout explicitly
   -l, --labels          emit labels for branch targets (default: on)
-  -L, --no-labels       emit raw addresses instead of labels
+  -L, --no-labels       emit raw flag slots instead of labels
+  -s, --semantic-labels infer semantic names (default; alias: --heuristic-labels)
+  -p, --positional-labels emit @Lxx names instead of inferred names
   -h, --help            print usage and exit
 ```
 
-The output is clean, valid 4A and reassembles to a byte-identical ROM. Trailing
-zero padding is omitted. If the inferred `<input stem>.4a` already exists, the
-assembly is printed to stdout instead of overwriting it; use `-o` to choose a
-destination explicitly. The design and round-trip guarantees are described in
+The output is clean, valid 4A and reassembles to a byte-identical ROM. Labels
+use inferred names by default: control-flow roles (`@halt`, `@loop`, `@done`,
+`@target`, `@restart`) and block operations (`@frame`, `@draw`, `@clear`,
+`@input`, `@inc_rN`, `@dec_rN`). These are hints from the code, not original
+source identifiers. Use `-p` for positional `@L00`, `@L01`, … names. Trailing
+zero padding is omitted.
+If the inferred `<input stem>.4a` already exists, the assembly is printed to
+stdout instead of overwriting it; use `-o` to choose a destination explicitly.
+The design and round-trip guarantees are described in
 [`docs/4DD.md`](docs/4DD.md).
 
 ### `4b` — box
