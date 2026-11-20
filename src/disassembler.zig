@@ -18,6 +18,10 @@
 //! are printed as raw instructions or `dw` instead. This keeps reassembly
 //! byte-identical even for ROMs that do not follow the usual slot pattern;
 //! it is the round-trip guarantee that matters, not pretty labels.
+//!
+//! The output is a clean 4A listing: one instruction per line, with operand
+//! alignment but no comments or address annotations. Trailing zero padding
+//! is omitted because `4a` recreates it when packing the image.
 
 const std = @import("std");
 const isa = @import("isa");
@@ -36,10 +40,6 @@ pub const DisassembleError = std.mem.Allocator.Error || std.Io.Writer.Error ||
 /// Width of the mnemonic/label column.
 const mnemonic_width = 6;
 
-/// Column at which the address/word comment starts. Addresses cannot prefix
-/// a line (that would not be valid 4A), so they live in the comment column.
-const comment_column = 24;
-
 /// Disassemble a 384-byte ROM into 4A source text. The returned slice is
 /// owned by the caller.
 pub fn disassemble(
@@ -57,8 +57,6 @@ pub fn disassemble(
     errdefer aw.deinit();
     const w = &aw.writer;
 
-    try w.writeAll("; 4d disassembly\n");
-
     // Trailing zero words are indistinguishable from 4a's automatic
     // padding, so stop at the last non-zero word. The image is packed from
     // exactly the emitted words, which reproduces the zero fill.
@@ -71,13 +69,6 @@ pub fn disassemble(
         for (0..end + 1) |addr| {
             try writeWord(w, addr, words[addr], &labels);
         }
-    }
-
-    const used = if (last) |end| end + 1 else 0;
-    if (used < rom.IMAGE_WORDS) {
-        try w.print("; ... {d} zero words of padding\n", .{
-            rom.IMAGE_WORDS - used,
-        });
     }
 
     var list = aw.toArrayList();
@@ -128,7 +119,7 @@ fn writeWord(
     if (labels.addr_slot[addr]) |slot| {
         var name_buf: [8]u8 = undefined;
         const name = try std.fmt.bufPrint(&name_buf, "@L{X:0>2}:", .{slot});
-        return writeLine(w, addr, name, null, word);
+        return writeLine(w, name, null);
     }
 
     var op_buf: [24]u8 = undefined;
@@ -137,7 +128,7 @@ fn writeWord(
 
     switch (d.op) {
         .nop, .read, .cls, .shl, .shr => {
-            if (d.a != 0 or d.b != 0) return writeDw(w, addr, word);
+            if (d.a != 0 or d.b != 0) return writeDw(w, word);
             mnemonic = switch (d.op) {
                 .nop => "nop",
                 .read => "read",
@@ -148,12 +139,12 @@ fn writeWord(
             };
         },
         .lda_mem => {
-            if (d.b != 0) return writeDw(w, addr, word);
+            if (d.b != 0) return writeDw(w, word);
             mnemonic = "lda";
             operand = try std.fmt.bufPrint(&op_buf, "r{d}", .{d.a});
         },
         .sta, .ifeq, .ifgt, .iflt => {
-            if (d.b != 0) return writeDw(w, addr, word);
+            if (d.b != 0) return writeDw(w, word);
             mnemonic = switch (d.op) {
                 .sta => "sta",
                 .ifeq => "ifeq",
@@ -164,14 +155,14 @@ fn writeWord(
             operand = try std.fmt.bufPrint(&op_buf, "r{d}", .{d.a});
         },
         .lda_imm => {
-            if (d.b != 0) return writeDw(w, addr, word);
+            if (d.b != 0) return writeDw(w, word);
             mnemonic = "lda";
             operand = try std.fmt.bufPrint(&op_buf, "#{d}", .{d.a});
         },
         .inc => {
             // opcode 0x5 with A == 1 is the local `dec` extension; A == 0 is
             // `inc`. Any other A (and any B) needs the `dw` escape hatch.
-            if (d.b != 0 or d.a > 1) return writeDw(w, addr, word);
+            if (d.b != 0 or d.a > 1) return writeDw(w, word);
             mnemonic = if (d.a == 1) "dec" else "inc";
         },
         .peek, .flip => {
@@ -182,12 +173,12 @@ fn writeWord(
             // `flag @name` defines a label in 4A, so a non-label flag word
             // must always use the raw numeric form — even when some other
             // address owns a label for this slot.
-            if (d.b != 0 or d.a >= isa.MAX_SLOTS) return writeDw(w, addr, word);
+            if (d.b != 0 or d.a >= isa.MAX_SLOTS) return writeDw(w, word);
             mnemonic = "flag";
             operand = try std.fmt.bufPrint(&op_buf, "{d}", .{d.a});
         },
         .jmp => {
-            if (d.b != 0 or d.a >= isa.MAX_SLOTS) return writeDw(w, addr, word);
+            if (d.b != 0 or d.a >= isa.MAX_SLOTS) return writeDw(w, word);
             mnemonic = "jmp";
             if (labels.slot_addr[d.a] != null) {
                 operand = try std.fmt.bufPrint(&op_buf, "@L{X:0>2}", .{d.a});
@@ -197,41 +188,33 @@ fn writeWord(
         },
     }
 
-    try writeLine(w, addr, mnemonic, operand, word);
+    try writeLine(w, mnemonic, operand);
 }
 
 /// Emit a `dw` line for a word that no 4A mnemonic can express exactly
 /// (non-zero unused nibbles, or flag slot 15, which `4a` rejects).
-fn writeDw(w: *std.Io.Writer, addr: usize, word: u16) !void {
+fn writeDw(w: *std.Io.Writer, word: u16) DisassembleError!void {
     var buf: [8]u8 = undefined;
     const operand = try std.fmt.bufPrint(&buf, "0x{X:0>3}", .{word});
-    try writeLine(w, addr, "dw", operand, word);
+    try writeLine(w, "dw", operand);
 }
 
-/// `mnemonic operands       ; ADDR: 0xNNN`
+/// `mnemonic operands`
 ///
-/// The address is part of the comment rather than a line prefix: the output
-/// is meant to be valid 4A source so it can be fed straight back to `4a`.
+/// A single valid 4A line, aligned to the same mnemonic column as `4c -S`.
 fn writeLine(
     w: *std.Io.Writer,
-    addr: usize,
     mnemonic: []const u8,
     operand: ?[]const u8,
-    word: u16,
 ) DisassembleError!void {
     try w.writeAll(mnemonic);
 
-    var used = mnemonic.len;
-
     if (operand) |o| {
-        const pad = mnemonic_width -| used;
-        try w.splatByteAll(' ', pad);
+        try w.splatByteAll(' ', mnemonic_width -| mnemonic.len);
         try w.writeAll(o);
-        used += pad + o.len;
     }
 
-    try w.splatByteAll(' ', comment_column -| used);
-    try w.print("; {X:0>2}: 0x{X:0>3}\n", .{ addr, word });
+    try w.writeByte('\n');
 }
 
 // ---- tests ----------------------------------------------------------------
@@ -242,17 +225,13 @@ fn dis(alloc: std.mem.Allocator, words: []const u16, options: Options) ![]u8 {
     return disassemble(alloc, &image, options);
 }
 
-test "format: mnemonic, operands and address/word comment" {
+test "format: mnemonics and operands" {
     const alloc = std.testing.allocator;
     const text = try dis(alloc, &.{ 0x380, 0x210 }, .{ .labels = false });
     defer alloc.free(text);
 
-    try std.testing.expect(std.mem.startsWith(u8, text, "; 4d disassembly\n"));
-    try std.testing.expect(std.mem.indexOf(u8, text, "lda   #8") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "; 00: 0x380") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "sta   r1") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "; 01: 0x210") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "; ... 254 zero words of padding") != null);
+    try std.testing.expectEqualStrings("lda   #8\nsta   r1\n", text);
+    try std.testing.expect(std.mem.indexOfScalar(u8, text, ';') == null);
 }
 
 test "every opcode renders with a mnemonic" {
@@ -282,10 +261,7 @@ test "labels: flag words become labels and jmp uses them" {
     const text = try dis(alloc, &.{ 0xB00, 0x380, 0xC00 }, .{});
     defer alloc.free(text);
 
-    try std.testing.expect(std.mem.indexOf(u8, text, "@L00:") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "; 00: 0xB00") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "jmp   @L00") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "; 02: 0xC00") != null);
+    try std.testing.expectEqualStrings("@L00:\nlda   #8\njmp   @L00\n", text);
 }
 
 test "no-labels prints raw flag slots" {
@@ -293,9 +269,7 @@ test "no-labels prints raw flag slots" {
     const text = try dis(alloc, &.{ 0xB00, 0xC00 }, .{ .labels = false });
     defer alloc.free(text);
 
-    try std.testing.expect(std.mem.indexOf(u8, text, "flag  0") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "jmp   0") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "@L00") == null);
+    try std.testing.expectEqualStrings("flag  0\njmp   0\n", text);
 }
 
 test "non-canonical words fall back to dw" {
@@ -330,11 +304,7 @@ test "all-zero ROM emits no instructions" {
     const text = try dis(alloc, &.{}, .{});
     defer alloc.free(text);
 
-    try std.testing.expectEqualStrings(
-        "; 4d disassembly\n" ++
-            "; ... 256 zero words of padding\n",
-        text,
-    );
+    try std.testing.expectEqualStrings("", text);
 }
 
 test "last non-zero word sets the end of disassembly" {
@@ -348,6 +318,6 @@ test "last non-zero word sets the end of disassembly" {
     const text = try disassemble(alloc, &image, .{});
     defer alloc.free(text);
 
-    try std.testing.expect(std.mem.indexOf(u8, text, "FF:") != null);
-    try std.testing.expect(std.mem.indexOf(u8, text, "padding") == null);
+    try std.testing.expect(std.mem.endsWith(u8, text, "lda   #8\n"));
+    try std.testing.expectEqual(@as(usize, 256), std.mem.count(u8, text, "\n"));
 }

@@ -119,22 +119,22 @@ Most words have a direct mnemonic form; unused nibbles are zero in anything
 12-bit word, so even reserved slot 15, non-zero B nibbles and arbitrary data
 round-trip unchanged.
 
-Each non-comment line is a single valid 4A line. The address is placed in the
-trailing comment rather than as a prefix (`00: lda …` would not parse):
+The output is a clean 4A listing: one line per word, operands aligned to a
+six-column mnemonic field (the same style as `4c -S`), and no comments or
+address annotations:
 
 ```
-@L00:                   ; 00: 0xB00
-lda   #7                ; 01: 0x370
-jmp   @L00              ; 02: 0xC00
+@L00:
+lda   #7
+jmp   @L00
 ```
 
 ## 8. Padding
 
 Zero words past the program are indistinguishable from `4a`'s automatic zero
-fill. Emission stops after the last non-zero word and a trailing comment
-records how many zero words were omitted. Reassembly packs only the emitted
-words, so the image is padded to 384 bytes again — byte-identically, with no
-need to emit hundreds of `nop`s.
+fill. Emission stops after the last non-zero word, with no comment or marker.
+Reassembly packs only the emitted words, so the image is padded to 384 bytes
+again — byte-identically, with no need to emit hundreds of `nop`s.
 
 ## 9. Validation
 
