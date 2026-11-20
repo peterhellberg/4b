@@ -7,7 +7,7 @@
 **A tiny fantasy console** with a 16×16 1-bit screen, 16 nibble-wide
 registers, one accumulator, and 256 twelve-bit instructions.
 
-Assemble with `4a` · Run with `4b` · Compile with `4c`
+Assemble with `4a` · Run with `4b` · Compile with `4c` · Disassemble with `4d`
 
 </div>
 
@@ -27,6 +27,7 @@ Assemble with `4a` · Run with `4b` · Compile with `4c`
 | **`4a`** | The assembler. Turns `.4a` source into a 384-byte ROM image (`.4b`): 256 little-endian 12-bit words, padded with zeroes. | `src/4a.zig`, `src/assembler.zig` |
 | **`4b`** | The box: a C program using [raylib](https://www.raylib.com) for windowing and input. Assembles `.4a` and compiles `.4c` sources at startup through embedded toolchain libraries. | `src/4b.c`, `src/vm.zig`, `src/assembler.zig`, `src/4c/compiler.zig` |
 | **`4c`** | The compiler for 4C, a small C-flavored language. Compiles `.4c` source into the same ROM image — or into equivalent `.4a` assembly text with `-S`. | `src/4c.zig`, `src/4c/` |
+| **`4d`** | The disassembler. Turns a 384-byte ROM back into `.4a` source that reassembles byte-identically. | `src/4d.zig`, `src/disassembler.zig` |
 
 ## Quick start
 
@@ -64,18 +65,21 @@ package manager and built from source.
 ### Commands
 
 ```console
-zig build                      # build all three binaries into zig-out/bin/
+zig build                      # build all four binaries into zig-out/bin/
 zig build test                 # run all unit tests
 
 zig build 4a -- <args>         # assemble with 4a
 zig build 4c -- <args>         # compile with 4c
 zig build 4b -- <args>         # run with 4b
+zig build 4d -- <args>         # disassemble with 4d
 
 zig build assemble -- <args>   # alias for 4a
 zig build compile -- <args>    # alias for 4c
 zig build run -- <args>        # alias for 4b
+zig build disassemble -- <args> # alias for 4d
 
 zig build examples             # build all example programs to examples/*.4b
+zig build dis-roundtrip        # 4b -> 4d -> 4a -> compare, for every example
 ```
 
 Standard Zig flags apply, e.g. `-Doptimize=ReleaseFast` or
@@ -108,6 +112,23 @@ Options:
 ```
 
 The language itself is specified in [`docs/4CL.md`](docs/4CL.md).
+
+### `4d` — disassembler
+
+```text
+Usage: 4d [options] <input.4b>
+
+Options:
+  -o, --output <file>   output assembly path (default: <input stem>.4a, '-' = stdout)
+  -l, --labels          emit labels for branch targets (default: on)
+  -L, --no-labels       emit raw addresses instead of labels
+  -h, --help            print usage and exit
+```
+
+The output is valid 4A and reassembles to a byte-identical ROM. Addresses and
+raw words are shown in the comment column; trailing zero padding is omitted.
+The design and round-trip guarantees are described in
+[`docs/4DD.md`](docs/4DD.md).
 
 ### `4b` — box
 
@@ -219,6 +240,9 @@ libraries:
 - **An embedded assembler** — `src/assembler.zig` exposes a single C-ABI
   entry point (`fourb_assemble`) that returns the 384-byte image and
   diagnostics, letting the box assemble `.4a` sources at startup.
+- **A matching disassembler** — `src/disassembler.zig` reuses `isa.decode`
+  and `rom.unpack` to turn ROMs back into 4A, with a round-trip suite that
+  keeps the two tools in lockstep (`zig build dis-roundtrip`).
 - **An embedded compiler** — `src/4c/compiler.zig` does the same for the
   4C compiler (`fourb_compile`), letting the box compile `.4c` sources at
   startup.
@@ -230,6 +254,7 @@ libraries:
 | [`docs/4BoD.md`](docs/4BoD.md)    | the original 4BoD specification             |
 | [`docs/4AL.md`](docs/4AL.md)      | 4A assembly language                        |
 | [`docs/4AD.md`](docs/4AD.md)      | assembler design notes                      |
+| [`docs/4DD.md`](docs/4DD.md)      | disassembler design notes                   |
 | [`docs/4CL.md`](docs/4CL.md)      | 4C language                                 |
 | [`docs/4CD.md`](docs/4CD.md)      | compiler design notes                       |
 

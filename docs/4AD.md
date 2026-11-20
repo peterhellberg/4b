@@ -77,8 +77,8 @@ The assembler is also embedded in the `4b` box as a static library
 ## 6. Build (Zig 0.17.1)
 
 The toolchain is pinned to **`0.17.1`**; recorded in
-`build.zig.zon`. `zig build` installs all three binaries (`4a`, `4c`,
-`4b`) into `zig-out/bin/`. Steps:
+`build.zig.zon`. `zig build` installs all four binaries (`4a`, `4c`, `4b`,
+`4d`) into `zig-out/bin/`. Steps:
 
 | Step                    | What it does                                        |
 | ----------------------- | --------------------------------------------------- |
@@ -89,7 +89,8 @@ The toolchain is pinned to **`0.17.1`**; recorded in
 | `zig build compile -- …` | alias for `4c`                                   |
 | `zig build 4b -- …`     | run in the `4b` box                                 |
 | `zig build run -- …`    | alias for `4b`                                      |
-| `zig build test`        | eight suites: both CLIs, assembler/compiler pipelines, rom packing, diagnostics, ISA table, VM |
+| `zig build test`        | suites for all CLIs, assembler/compiler/disassembler pipelines, rom packing, diagnostics, ISA table, VM, plus ROM round trips |
+| `zig build dis-roundtrip` | disassemble and reassemble every example ROM and compare |
 | `zig build examples`    | build every `examples/*.{4a,4c}` to `examples/*.4b` |
 
 The box links against three Zig static libraries built from this repo:
