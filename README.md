@@ -119,15 +119,17 @@ The language itself is specified in [`docs/4CL.md`](docs/4CL.md).
 Usage: 4d [options] <input.4b>
 
 Options:
-  -o, --output <file>   output assembly path (default: <input stem>.4a, '-' = stdout)
+  -o, --output <file>   output assembly path (default: <input stem>.4a, or stdout if it exists)
+                        use '-' to write to stdout explicitly
   -l, --labels          emit labels for branch targets (default: on)
   -L, --no-labels       emit raw addresses instead of labels
   -h, --help            print usage and exit
 ```
 
-The output is valid 4A and reassembles to a byte-identical ROM. Addresses and
-raw words are shown in the comment column; trailing zero padding is omitted.
-The design and round-trip guarantees are described in
+The output is clean, valid 4A and reassembles to a byte-identical ROM. Trailing
+zero padding is omitted. If the inferred `<input stem>.4a` already exists, the
+assembly is printed to stdout instead of overwriting it; use `-o` to choose a
+destination explicitly. The design and round-trip guarantees are described in
 [`docs/4DD.md`](docs/4DD.md).
 
 ### `4b` — box
