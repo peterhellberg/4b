@@ -35,7 +35,8 @@ example ROM.
 
 ```
 4d [options] <input.4b>
-  -o, --output <file>   output assembly path (default: <input stem>.4a, '-' = stdout)
+  -o, --output <file>   output assembly path (default: <input stem>.4a, or stdout if it exists)
+                        use '-' to write to stdout explicitly
   -l, --labels          emit labels for branch targets (default: on)
   -L, --no-labels       emit raw flag slots instead of labels
   -h, --help            print usage and exit
@@ -43,6 +44,10 @@ example ROM.
 
 As with `4a`, output is written only after the input has been validated: on
 error nothing is written and the exit status is non-zero.
+
+Without `-o`, `4d` creates `<input stem>.4a` exclusively. If that file already
+exists, it is left untouched and the assembly is written to stdout instead.
+An explicit `-o` remains authoritative and may overwrite its target.
 
 ## 4. Repository layout
 

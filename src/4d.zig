@@ -102,22 +102,67 @@ pub fn main(args: std.process.Init) !u8 {
         return 1;
     };
 
-    const output_path = opts.output orelse defaultOutput(alloc, input_path) catch {
-        std.debug.print("error: out of memory\n", .{});
+    if (opts.output) |output_path| {
+        writeOutput(io, output_path, text) catch |e| {
+            std.debug.print("error: cannot write '{s}': {s}\n", .{
+                output_path,
+                @errorName(e),
+            });
 
-        return 1;
-    };
+            return 1;
+        };
+    } else {
+        const output_path = defaultOutput(alloc, input_path) catch {
+            std.debug.print("error: out of memory\n", .{});
 
-    writeOutput(io, output_path, text) catch |e| {
-        std.debug.print("error: cannot write '{s}': {s}\n", .{
+            return 1;
+        };
+
+        const wrote_file = writeIfAbsent(
+            io,
+            std.Io.Dir.cwd(),
             output_path,
-            @errorName(e),
-        });
+            text,
+        ) catch |e| {
+            std.debug.print("error: cannot write '{s}': {s}\n", .{
+                output_path,
+                @errorName(e),
+            });
 
-        return 1;
-    };
+            return 1;
+        };
+
+        if (!wrote_file) {
+            writeOutput(io, "-", text) catch |e| {
+                std.debug.print("error: cannot write assembly to stdout: {s}\n", .{
+                    @errorName(e),
+                });
+
+                return 1;
+            };
+        }
+    }
 
     return 0;
+}
+
+/// Write `data` only when `path` does not exist yet. The exclusive create is
+/// atomic, so a file appearing between a separate existence check and the
+/// write cannot be clobbered. Returns false when the path already existed.
+fn writeIfAbsent(
+    io: std.Io,
+    dir: std.Io.Dir,
+    path: []const u8,
+    data: []const u8,
+) !bool {
+    var file = dir.createFile(io, path, .{ .exclusive = true }) catch |e| switch (e) {
+        error.PathAlreadyExists => return false,
+        else => return e,
+    };
+    defer file.close(io);
+
+    try file.writeStreamingAll(io, data);
+    return true;
 }
 
 fn writeOutput(io: std.Io, path: []const u8, data: []const u8) !void {
@@ -147,6 +192,33 @@ fn defaultOutput(alloc: std.mem.Allocator, input_path: []const u8) ![]const u8 {
     });
 }
 
+test "writeIfAbsent creates a missing file and preserves an existing one" {
+    const alloc = std.testing.allocator;
+    const io = std.testing.io;
+
+    var tmp = std.testing.tmpDir(.{});
+    defer tmp.cleanup();
+
+    try tmp.dir.writeFile(io, .{
+        .sub_path = "prog.4a",
+        .data = "original\n",
+    });
+
+    const wrote_existing = try writeIfAbsent(io, tmp.dir, "prog.4a", "new\n");
+    try std.testing.expect(!wrote_existing);
+
+    const preserved = try tmp.dir.readFileAlloc(io, "prog.4a", alloc, .limited(64));
+    defer alloc.free(preserved);
+    try std.testing.expectEqualStrings("original\n", preserved);
+
+    const wrote_new = try writeIfAbsent(io, tmp.dir, "other.4a", "new\n");
+    try std.testing.expect(wrote_new);
+
+    const created = try tmp.dir.readFileAlloc(io, "other.4a", alloc, .limited(64));
+    defer alloc.free(created);
+    try std.testing.expectEqualStrings("new\n", created);
+}
+
 test "defaultOutput keeps directories with dots" {
     const alloc = std.testing.allocator;
 
@@ -171,7 +243,8 @@ fn printUsage() void {
         \\Usage: 4d [options] <input.4b>
         \\
         \\Options:
-        \\  -o, --output <file>   output assembly path (default: <input stem>.4a, '-' = stdout)
+        \\  -o, --output <file>   output assembly path (default: <input stem>.4a, or stdout if it exists)
+        \\                        use '-' to write to stdout explicitly
         \\  -l, --labels          emit labels for branch targets (default: on)
         \\  -L, --no-labels       emit raw addresses instead of labels
         \\  -h, --help            print usage and exit
