@@ -26,8 +26,10 @@
 //! which are not stored in the ROM.
 //!
 //! The output is a clean 4A listing: one instruction per line, with operand
-//! alignment but no comments or address annotations. Trailing zero padding
-//! is omitted because `4a` recreates it when packing the image.
+//! alignment but no comments or address annotations. Labels stay in column
+//! zero and following instructions are indented, as in the bundled examples.
+//! Trailing zero padding is omitted because `4a` recreates it when packing
+//! the image.
 
 const std = @import("std");
 const isa = @import("isa");
@@ -56,8 +58,11 @@ pub const Options = struct {
 pub const DisassembleError = std.mem.Allocator.Error || std.Io.Writer.Error ||
     error{NoSpaceLeft};
 
-/// Width of the mnemonic/label column.
+/// Width of the mnemonic column, excluding any body indentation.
 const mnemonic_width = 6;
+
+/// Indentation for instructions following a label definition.
+const body_indent = 2;
 
 /// Disassemble a 384-byte ROM into 4A source text. The returned slice is
 /// owned by the caller.
@@ -85,8 +90,15 @@ pub fn disassemble(
     errdefer aw.deinit();
     const w = &aw.writer;
 
+    var in_label_body = false;
     for (0..end) |addr| {
+        const is_label = labels.addr_slot[addr] != null;
+        if (in_label_body and !is_label) {
+            try w.splatByteAll(' ', body_indent);
+        }
+
         try writeWord(w, addr, words[addr], &labels);
+        if (is_label) in_label_body = true;
     }
 
     var list = aw.toArrayList();
@@ -555,7 +567,7 @@ test "labels: flag words become labels and jmp uses them" {
     });
     defer alloc.free(text);
 
-    try std.testing.expectEqualStrings("@L00:\nlda   #8\njmp   @L00\n", text);
+    try std.testing.expectEqualStrings("@L00:\n  lda   #8\n  jmp   @L00\n", text);
 }
 
 test "semantic labels are the default: self-loop becomes halt" {
@@ -563,7 +575,7 @@ test "semantic labels are the default: self-loop becomes halt" {
     const text = try dis(alloc, &.{ 0xB00, 0xC00 }, .{});
     defer alloc.free(text);
 
-    try std.testing.expectEqualStrings("@halt:\njmp   @halt\n", text);
+    try std.testing.expectEqualStrings("@halt:\n  jmp   @halt\n", text);
 }
 
 test "semantic labels: backward branch becomes loop" {
@@ -573,7 +585,7 @@ test "semantic labels: backward branch becomes loop" {
     });
     defer alloc.free(text);
 
-    try std.testing.expectEqualStrings("nop\n@loop:\ninc\njmp   @loop\ncls\ncls\n", text);
+    try std.testing.expectEqualStrings("nop\n@loop:\n  inc\n  jmp   @loop\n  cls\n  cls\n", text);
 }
 
 test "semantic labels: forward conditional target becomes done" {
@@ -584,7 +596,7 @@ test "semantic labels: forward conditional target becomes done" {
     defer alloc.free(text);
 
     try std.testing.expectEqualStrings(
-        "@start:\nifeq  r0\njmp   @done\nnop\n@done:\n",
+        "@start:\n  ifeq  r0\n  jmp   @done\n  nop\n@done:\n",
         text,
     );
 }
@@ -597,7 +609,7 @@ test "semantic labels: forward unconditional target becomes target" {
     defer alloc.free(text);
 
     try std.testing.expectEqualStrings(
-        "@start:\njmp   @target\nnop\n@target:\n",
+        "@start:\n  jmp   @target\n  nop\n@target:\n",
         text,
     );
 }
@@ -610,7 +622,7 @@ test "semantic labels: repeated roles get unique suffixes" {
     defer alloc.free(text);
 
     try std.testing.expectEqualStrings(
-        "@halt:\njmp   @halt\n@halt2:\njmp   @halt2\n",
+        "@halt:\n  jmp   @halt\n@halt2:\n  jmp   @halt2\n",
         text,
     );
 }
@@ -672,7 +684,7 @@ test "semantic labels: outer reset jump becomes restart" {
     });
     defer alloc.free(text);
 
-    try std.testing.expectEqualStrings("nop\n@restart:\nlda   #0\njmp   @restart\n", text);
+    try std.testing.expectEqualStrings("nop\n@restart:\n  lda   #0\n  jmp   @restart\n", text);
 }
 
 test "no-labels prints raw flag slots" {

@@ -224,11 +224,24 @@ The window title shows the ROM name.
 Every program above also exists as 4C source (`examples/*.4c`)
 — same behavior, compiled by `4c`.
 
-Three ways to run one:
+The checked-in `examples/<name>.4b` ROMs are not all assembled from the
+matching `.4a` source; some are compiled from `.4c`. Cross-built variants use
+`-4a` or `-4c` suffixes. For example, `examples/diag.4b` is the 4C build, while
+`examples/diag-4a.4b` is assembled from `examples/diag.4a`. Avoid relying on
+`4a`'s default output name here, since it would overwrite the canonical ROM.
+
+Ways to run the 4A version:
 
 ```console
-zig-out/bin/4a examples/diag.4a && zig-out/bin/4b examples/diag.4b
-zig-out/bin/4b examples/diag.4a        # the box compiles/assembles it at startup
+zig-out/bin/4b examples/diag-4a.4b      # checked-in 4A-built ROM
+zig-out/bin/4b examples/diag.4a         # the box assembles it at startup
+zig-out/bin/4a examples/diag.4a -o /tmp/diag.4b
+zig-out/bin/4b /tmp/diag.4b             # assemble explicitly
+```
+
+To run the canonical checked-in ROM (compiled from `diag.4c`):
+
+```console
 zig build examples && zig build run -- examples/diag.4b
 ```
 
