@@ -136,8 +136,8 @@ const LabelFacts = struct {
     halt: bool = false,
     backward: bool = false,
     from_end: bool = false,
-    unconditional: bool = false,
     forward_conditional: bool = false,
+    has_clear: bool = false,
     has_read: bool = false,
     has_inc_dec: bool = false,
     is_targeted_conditionally: bool = false,
@@ -243,20 +243,39 @@ const LabelMap = struct {
             }
 
             if (isConditionalJump(words, map, addr)) {
+                f.is_targeted_conditionally = true;
                 if (target_addr > addr) f.forward_conditional = true;
             } else {
-                f.unconditional = true;
+                f.is_targeted_unconditionally = true;
             }
 
-            // Inspect the target block for semantic clues
+            // Inspect the target's block for semantic clues. lda_mem is a
+            // phase guard or an ordinary load, not an init on its own; only
+            // lda #k followed by sta rN is a reliable initialization.
             var at = target_addr + 1;
             while (at < end) : (at += 1) {
                 if (map.addr_slot[at] != null) break;
                 const d2 = isa.decode(words[at]);
                 switch (d2.op) {
-                    .read => { f.has_read = true; break; },
-                    .inc => { f.has_inc_dec = true; break; },
-                    .lda_mem, .lda_imm => { f.is_init_sequence = true; break; },
+                    .cls => f.has_clear = true,
+                    .read => {
+                        f.has_read = true;
+                        break;
+                    },
+                    .inc => {
+                        f.has_inc_dec = true;
+                        break;
+                    },
+                    .jmp => break,
+                    .lda_imm => {
+                        if (at + 1 < end) {
+                            const next = isa.decode(words[at + 1]);
+                            if (next.op == .sta and next.b == 0) {
+                                f.is_init_sequence = true;
+                                break;
+                            }
+                        }
+                    },
                     else => {},
                 }
             }
@@ -276,12 +295,13 @@ const LabelMap = struct {
                 role = "start";
             } else if (isEmptyBody(words, map, addr, end)) {
                 role = "entry";
-            } else if (f.has_read and f.backward) {
+            } else if (f.is_targeted_conditionally and
+                !f.is_targeted_unconditionally and
+                isHandler(words, map, addr, end, slot))
+            {
+                role = "handler";
+            } else if (f.has_read and f.backward and !f.has_clear) {
                 role = "poll";
-            } else if (f.has_inc_dec and f.backward) {
-                role = "delay";
-            } else if (f.is_init_sequence and !f.backward) {
-                role = "init";
             } else if (labelContent(words, map, addr, end)) |content| {
                 role = switch (content) {
                     .frame => "frame",
@@ -293,9 +313,13 @@ const LabelMap = struct {
                 };
             } else if (f.from_end and f.backward) {
                 role = "restart";
+            } else if (f.has_inc_dec and f.backward) {
+                role = "delay";
+            } else if (f.is_init_sequence and !f.backward) {
+                role = "init";
             } else if (f.backward) {
                 role = "loop";
-            } else if (f.unconditional) {
+            } else if (f.is_targeted_unconditionally) {
                 role = "target";
             } else if (f.forward_conditional) {
                 role = "done";
@@ -305,6 +329,68 @@ const LabelMap = struct {
         }
     }
 };
+
+/// Does `addr`'s block contain a jump to `target`? With `conditional_only`,
+/// count only jumps guarded by an `if*`, which is how a handler is invoked.
+fn blockJumpsTo(
+    words: *const [rom.IMAGE_WORDS]u16,
+    labels: *const LabelMap,
+    addr: usize,
+    end: usize,
+    target: usize,
+    conditional_only: bool,
+) bool {
+    var at = addr + 1;
+    while (at < end) : (at += 1) {
+        if (labels.addr_slot[at] != null) break;
+        const d = isa.decode(words[at]);
+        if (d.op != .jmp or d.b != 0 or d.a != target) continue;
+        if (conditional_only and !isConditionalJump(words, labels, at)) continue;
+        return true;
+    }
+
+    return false;
+}
+
+/// The last jump in `addr`'s block, if any.
+const LastJump = struct { addr: usize, slot: usize };
+
+fn lastJump(
+    words: *const [rom.IMAGE_WORDS]u16,
+    labels: *const LabelMap,
+    addr: usize,
+    end: usize,
+) ?LastJump {
+    var found: ?LastJump = null;
+    var at = addr + 1;
+    while (at < end) : (at += 1) {
+        if (labels.addr_slot[at] != null) break;
+        const d = isa.decode(words[at]);
+        if (d.op == .jmp and d.b == 0 and d.a < isa.MAX_SLOTS) {
+            found = .{ .addr = at, .slot = d.a };
+        }
+    }
+
+    return found;
+}
+
+/// A handler is a stub whose caller conditionally jumps into it and whose
+/// last instruction conditionally jumps back to that caller. A loop head is
+/// excluded because its last jump targets itself (or the next loop phase).
+/// See the @hL/@hR stubs in examples/move.4a.
+fn isHandler(
+    words: *const [rom.IMAGE_WORDS]u16,
+    labels: *const LabelMap,
+    addr: usize,
+    end: usize,
+    slot: usize,
+) bool {
+    const ret = lastJump(words, labels, addr, end) orelse return false;
+    if (ret.slot == slot or !isConditionalJump(words, labels, ret.addr)) return false;
+
+    const caller_addr = labels.slot_addr[ret.slot] orelse return false;
+    return blockJumpsTo(words, labels, caller_addr, end, slot, true);
+}
 
 /// A label with no body before the next label is usually a compiler entry
 /// point whose flag is recorded during startup fall-through.
@@ -602,14 +688,70 @@ test "semantic labels are the default: self-loop becomes halt" {
     try std.testing.expectEqualStrings("@halt:\n  jmp   @halt\n", text);
 }
 
-test "semantic labels: backward branch becomes loop" {
+test "semantic labels: backward branch with increment becomes delay" {
     const alloc = std.testing.allocator;
     const text = try dis(alloc, &.{ 0x000, 0xB00, 0x500, 0xC00, 0x600, 0x600 }, .{
         .label_style = .semantic,
     });
     defer alloc.free(text);
 
-    try std.testing.expectEqualStrings("nop\n@loop:\n  inc\n  jmp   @loop\n  cls\n  cls\n", text);
+    try std.testing.expectEqualStrings("nop\n@delay:\n  inc\n  jmp   @delay\n  cls\n  cls\n", text);
+}
+
+test "semantic labels: plain backward branch becomes loop" {
+    const alloc = std.testing.allocator;
+    const text = try dis(alloc, &.{ 0x000, 0xB00, 0x700, 0xC00, 0x700, 0x700 }, .{
+        .label_style = .semantic,
+    });
+    defer alloc.free(text);
+
+    try std.testing.expectEqualStrings("nop\n@loop:\n  shl\n  jmp   @loop\n  shl\n  shl\n", text);
+}
+
+test "semantic labels: backward branch with read becomes poll" {
+    const alloc = std.testing.allocator;
+    const text = try dis(alloc, &.{ 0x000, 0xB00, 0x400, 0xC00, 0x400, 0x400 }, .{
+        .label_style = .semantic,
+    });
+    defer alloc.free(text);
+
+    try std.testing.expectEqualStrings("nop\n@poll:\n  read\n  jmp   @poll\n  read\n  read\n", text);
+}
+
+test "semantic labels: clear plus read stays frame, not poll" {
+    const alloc = std.testing.allocator;
+    const text = try dis(alloc, &.{ 0x000, 0xB00, 0x600, 0x400, 0xC00, 0x600 }, .{
+        .label_style = .semantic,
+    });
+    defer alloc.free(text);
+
+    try std.testing.expectEqualStrings("nop\n@frame:\n  cls\n  read\n  jmp   @frame\n  cls\n", text);
+}
+
+test "semantic labels: conditional call and return becomes handler" {
+    const alloc = std.testing.allocator;
+    const text = try dis(alloc, &.{ 0xB00, 0xD00, 0xC10, 0xB10, 0xD00, 0xC00 }, .{
+        .label_style = .semantic,
+    });
+    defer alloc.free(text);
+
+    try std.testing.expectEqualStrings(
+        "@start:\n  ifeq  r0\n  jmp   @handler\n@handler:\n  ifeq  r0\n  jmp   @start\n",
+        text,
+    );
+}
+
+test "semantic labels: forward target starting with lda #k becomes init" {
+    const alloc = std.testing.allocator;
+    const text = try dis(alloc, &.{ 0xC00, 0x000, 0xB00, 0x380, 0x210 }, .{
+        .label_style = .semantic,
+    });
+    defer alloc.free(text);
+
+    try std.testing.expectEqualStrings(
+        "jmp   @init\nnop\n@init:\n  lda   #8\n  sta   r1\n",
+        text,
+    );
 }
 
 test "semantic labels: forward conditional target becomes done" {
