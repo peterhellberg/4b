@@ -213,6 +213,10 @@ pub fn build(b: *std.Build) void {
     for ([_][]const u8{ "halt", "line", "fill" }) |name| {
         addExampleOut(b, examples_step, compiler, name, "4c", "-4c");
     }
+
+    // The round-trip suite @embedFile()s these generated ROMs, so it cannot
+    // compile before `examples` has produced them (a fresh checkout has none).
+    roundtrip_tests.step.dependOn(examples_step);
 }
 
 /// Create a plain Zig module for the given source file.
