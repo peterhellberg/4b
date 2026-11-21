@@ -115,12 +115,16 @@ selects deterministic `@L00`, `@L01`, … names matching the slot number.
 | Label is at address 0 | `@start` | Program entry point |
 | Label has no body before the next label | `@entry` | Compiler entry flag |
 | Block has `cls` plus `flip` or `read` | `@frame` | Clear-and-redraw frame |
+| Conditional jump in, conditional jump back to caller | `@handler` | Handler stub |
 | First operation is `flip` | `@draw` | Pixel drawing block |
 | First operation is `cls` | `@clear` | Screen clear block |
 | First operation is `read` | `@input` | Button input block |
 | Block starts `lda rN; inc; sta rN` | `@inc_rN` | Register increment |
 | Block starts `lda rN; dec; sta rN` | `@dec_rN` | Register decrement |
 | Backward jump from the final instruction | `@restart` | Outer reset loop |
+| Backward loop containing `read`, without a frame | `@poll` | Input polling loop |
+| Backward loop containing `inc`/`dec`, without a counter block | `@delay` | Busy-wait delay loop |
+| Non-loop block starting `lda #k; sta rN` | `@init` | Register initialization |
 | Any other backward jump | `@loop` | Back edge |
 | Unconditional forward jump targets it | `@target` | Generic jump target |
 | Forward jump guarded by `if*` targets it | `@done` | Conditional skip exit |
