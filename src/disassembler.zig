@@ -138,6 +138,11 @@ const LabelFacts = struct {
     from_end: bool = false,
     unconditional: bool = false,
     forward_conditional: bool = false,
+    has_read: bool = false,
+    has_inc_dec: bool = false,
+    is_targeted_conditionally: bool = false,
+    is_targeted_unconditionally: bool = false,
+    is_init_sequence: bool = false,
 };
 
 /// An operation found near the start of a label's block.
@@ -242,6 +247,19 @@ const LabelMap = struct {
             } else {
                 f.unconditional = true;
             }
+
+            // Inspect the target block for semantic clues
+            var at = target_addr + 1;
+            while (at < end) : (at += 1) {
+                if (map.addr_slot[at] != null) break;
+                const d2 = isa.decode(words[at]);
+                switch (d2.op) {
+                    .read => { f.has_read = true; break; },
+                    .inc => { f.has_inc_dec = true; break; },
+                    .lda_mem, .lda_imm => { f.is_init_sequence = true; break; },
+                    else => {},
+                }
+            }
         }
 
         for (0..isa.MAX_SLOTS) |slot| {
@@ -258,6 +276,12 @@ const LabelMap = struct {
                 role = "start";
             } else if (isEmptyBody(words, map, addr, end)) {
                 role = "entry";
+            } else if (f.has_read and f.backward) {
+                role = "poll";
+            } else if (f.has_inc_dec and f.backward) {
+                role = "delay";
+            } else if (f.is_init_sequence and !f.backward) {
+                role = "init";
             } else if (labelContent(words, map, addr, end)) |content| {
                 role = switch (content) {
                     .frame => "frame",
