@@ -91,7 +91,7 @@ The toolchain is pinned to **`0.17.1`**; recorded in
 | `zig build run -- …`    | alias for `4b`                                      |
 | `zig build test`        | suites for all CLIs, assembler/compiler/disassembler pipelines, rom packing, diagnostics, ISA table, VM, plus ROM round trips |
 | `zig build dis-roundtrip` | disassemble and reassemble every example ROM and compare |
-| `zig build examples`    | build every `examples/*.{4a,4c}` to `examples/*.4b` |
+| `zig build examples`    | build every example with both toolchains; canonical ROMs plus `-4a`/`-4c` suffixed variants |
 
 The box links against three Zig static libraries built from this repo:
 `vm.zig` (the machine), `assembler.zig` (the assembler) and

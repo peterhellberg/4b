@@ -153,14 +153,15 @@ Most words have a direct mnemonic form; unused nibbles are zero in anything
 12-bit word, so even reserved slot 15, non-zero B nibbles and arbitrary data
 round-trip unchanged.
 
-The output is a clean 4A listing: one line per word, operands aligned to a
-six-column mnemonic field (the same style as `4c -S`), and no comments or
-address annotations:
+The output is a clean 4A listing: one line per word, no comments or address
+annotations, and operands aligned to a six-column mnemonic field (the same
+style as `4c -S`). Labels stay in column zero and following instructions are
+indented two spaces, matching the bundled source examples:
 
 ```
 @L00:
-lda   #7
-jmp   @L00
+  lda   #7
+  jmp   @L00
 ```
 
 ## 8. Padding
